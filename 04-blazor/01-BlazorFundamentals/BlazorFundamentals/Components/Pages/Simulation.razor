@@ -1,0 +1,40 @@
+@page "/simulation"
+@rendermode InteractiveServer
+
+<PageTitle>Boids Simulation</PageTitle>
+
+<h1>@simulationName</h1>
+
+<p>
+    This page demonstrates how a Boids simulation interface
+    can be composed from reusable Blazor components.
+</p>
+
+<p>Boid count: @boidCount</p>
+
+@if (boidCount > 0)
+{
+    <p>The simulation contains boids.</p>
+}
+else
+{
+    <p>The simulation is empty.</p>
+}
+
+<BoidSummary Count="@boidCount" />
+
+<h2>Boid identifiers</h2>
+
+<ul>
+    @foreach (int id in boidIds)
+    {
+        <li @key="id">Boid @id</li>
+    }
+</ul>
+
+@code {
+    private string simulationName = "Boids Simulation";
+    private int boidCount = 3;
+
+    private readonly int[] boidIds = [1, 2, 3];
+}
