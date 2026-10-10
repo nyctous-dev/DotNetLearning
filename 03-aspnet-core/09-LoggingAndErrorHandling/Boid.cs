@@ -1,0 +1,1 @@
+public sealed record Boid(int Id, double Speed);
