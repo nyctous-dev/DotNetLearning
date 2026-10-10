@@ -1,0 +1,39 @@
+.controls {
+    margin: 1rem 0;
+}
+
+.status {
+    margin-left: 1rem;
+}
+
+.simulation-board {
+    position: relative;
+    width: 100%;
+    max-width: 720px;
+    height: 360px;
+    overflow: hidden;
+    border: 1px solid #888;
+    border-radius: 8px;
+    background: #111827;
+}
+
+.simulation-point {
+    position: absolute;
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #60a5fa;
+    color: #111827;
+    font-size: 0.7rem;
+    font-weight: 700;
+    transform: translate(-50%, -50%);
+}
+
+.point-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 0.5rem;
+    max-width: 720px;
+}

@@ -1,0 +1,12 @@
+@using RenderingPerformanceInterop.Models
+
+<div class="point-details">
+    <strong>Point @Point.Id</strong>
+    <span>X: @Point.X.ToString("F1")</span>
+    <span>Y: @Point.Y.ToString("F1")</span>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public BoidPoint Point { get; set; } = default!;
+}
