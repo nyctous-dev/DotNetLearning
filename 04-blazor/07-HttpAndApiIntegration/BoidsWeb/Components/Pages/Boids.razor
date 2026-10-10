@@ -1,0 +1,174 @@
+@page "/boids"
+@using System.Text.Json
+@using BoidsWeb.Services
+@using Microsoft.AspNetCore.Components.Forms
+@implements IDisposable
+@inject BoidsApiClient Api
+
+<PageTitle>Boids</PageTitle>
+
+<h1>Boids</h1>
+
+<p>Data is loaded from the ASP.NET Core API.</p>
+
+@if (_isLoading)
+{
+    <p>Loading boids...</p>
+}
+else if (_errorMessage is not null)
+{
+    <p role="alert">@_errorMessage</p>
+    <button type="button" @onclick="LoadBoidsAsync">Retry</button>
+}
+else if (_boids.Count == 0)
+{
+    <p>No boids were found.</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>X</th>
+                <th>Y</th>
+                <th>Speed</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (BoidDto boid in _boids)
+            {
+                <tr>
+                    <td>@boid.Id</td>
+                    <td>@boid.X</td>
+                    <td>@boid.Y</td>
+                    <td>@boid.Speed</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+<h2>Create a boid</h2>
+
+<EditForm Model="_newBoid" OnValidSubmit="CreateBoidAsync">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    <div class="mb-3">
+        <label for="x">X coordinate</label>
+        <InputNumber id="x" class="form-control"
+                     @bind-Value="_newBoid.X" />
+    </div>
+
+    <div class="mb-3">
+        <label for="y">Y coordinate</label>
+        <InputNumber id="y" class="form-control"
+                     @bind-Value="_newBoid.Y" />
+    </div>
+
+    <div class="mb-3">
+        <label for="speed">Speed</label>
+        <InputNumber id="speed" class="form-control"
+                     @bind-Value="_newBoid.Speed" />
+    </div>
+
+    <button type="submit" disabled="@_isSubmitting">
+        @(_isSubmitting ? "Creating..." : "Create boid")
+    </button>
+</EditForm>
+
+@if (_statusMessage is not null)
+{
+    <p role="status">@_statusMessage</p>
+}
+
+@code {
+    private readonly CancellationTokenSource _lifetime = new();
+
+    private List<BoidDto> _boids = [];
+    private CreateBoidRequest _newBoid = new();
+
+    private bool _isLoading = true;
+    private bool _isSubmitting;
+    private string? _errorMessage;
+    private string? _statusMessage;
+
+    protected override Task OnInitializedAsync() =>
+        LoadBoidsAsync();
+
+    private async Task LoadBoidsAsync()
+    {
+        _isLoading = true;
+        _errorMessage = null;
+
+        try
+        {
+            IReadOnlyList<BoidDto> result =
+                await Api.GetBoidsAsync(_lifetime.Token);
+
+            _boids = result.ToList();
+        }
+        catch (OperationCanceledException)
+            when (_lifetime.IsCancellationRequested)
+        {
+            // The component was disposed while the request was pending.
+        }
+        catch (HttpRequestException exception)
+        {
+            _errorMessage = $"Could not load boids: {exception.Message}";
+        }
+        catch (JsonException)
+        {
+            _errorMessage = "The API returned invalid JSON.";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task CreateBoidAsync()
+    {
+        _isSubmitting = true;
+        _errorMessage = null;
+        _statusMessage = null;
+
+        try
+        {
+            BoidDto? created =
+                await Api.CreateBoidAsync(_newBoid, _lifetime.Token);
+
+            _statusMessage = created is null
+                ? "The API accepted the creation request."
+                : $"Boid {created.Id} was created successfully.";
+
+            _newBoid = new();
+
+            await LoadBoidsAsync();
+        }
+        catch (OperationCanceledException)
+            when (_lifetime.IsCancellationRequested)
+        {
+            // The component was disposed while the request was pending.
+        }
+        catch (HttpRequestException exception)
+        {
+            _errorMessage = $"Could not create boid: {exception.Message}";
+        }
+        catch (JsonException)
+        {
+            _errorMessage = "The API returned an invalid creation response.";
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        _lifetime.Cancel();
+        _lifetime.Dispose();
+    }
+}
