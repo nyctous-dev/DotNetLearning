@@ -1,0 +1,12 @@
+[
+  {
+    "Username": "admin",
+    "PasswordHash": "AQAAAAIAAYagAAAAEJEkZq5A7rLiB7oMOEcFEFtp2GdNsB\u002BWrOJHKlfLRc2EDtAKbQOIwZCbLz2rHEfkZg==",
+    "Role": "Administrator"
+  },
+  {
+    "Username": "viewer",
+    "PasswordHash": "AQAAAAIAAYagAAAAEFoGRmDUEp/w6qam2LxbhRpAZxuFVmQBJHRNsQDyaROkcQnBJ9qLUpNQ0YvxRzn6kA==",
+    "Role": "Viewer"
+  }
+]

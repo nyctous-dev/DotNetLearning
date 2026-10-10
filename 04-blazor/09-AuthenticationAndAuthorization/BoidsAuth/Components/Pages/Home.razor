@@ -1,0 +1,34 @@
+﻿@page "/"
+
+<PageTitle>Boids Authentication</PageTitle>
+
+<h1>Boids Authentication Demo</h1>
+
+<p>
+    Authentication establishes identity. Authorization determines
+    which operations that identity may perform.
+</p>
+
+<AuthorizeView>
+    <Authorized Context="authState">
+        <p>
+            Signed in as
+            <strong>@authState.User.Identity?.Name</strong>.
+        </p>
+
+        <p><a href="/profile">Open protected profile</a></p>
+        <p><a href="/admin">Open administrator page</a></p>
+        <p><a href="/logout">Sign out</a></p>
+
+        <p>
+            <a href="/api/simulation/settings">
+                View simulation settings API
+            </a>
+        </p>
+    </Authorized>
+
+    <NotAuthorized>
+        <p>You are not signed in.</p>
+        <a href="/login">Sign in</a>
+    </NotAuthorized>
+</AuthorizeView>

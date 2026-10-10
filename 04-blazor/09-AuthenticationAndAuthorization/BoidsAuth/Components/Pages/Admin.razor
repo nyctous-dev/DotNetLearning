@@ -1,0 +1,8 @@
+@page "/admin"
+@attribute [Authorize(Roles = "Administrator")]
+
+<PageTitle>Administrator</PageTitle>
+
+<h1>Administrator page</h1>
+
+<p>Only users with the Administrator role should see this page.</p>

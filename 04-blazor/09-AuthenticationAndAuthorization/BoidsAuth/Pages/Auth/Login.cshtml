@@ -1,0 +1,26 @@
+@page "/login"
+@model BoidsAuth.Pages.Auth.LoginModel
+
+<PageTitle>Sign in</PageTitle>
+
+<h1>Sign in</h1>
+
+<p>Use one of the local development accounts.</p>
+
+<div asp-validation-summary="ModelOnly" role="alert"></div>
+
+<form method="post" asp-page="/Auth/Login">
+    <div>
+        <label asp-for="Username">Username</label>
+        <input asp-for="Username" autocomplete="username" />
+    </div>
+
+    <div>
+        <label asp-for="Password">Password</label>
+        <input asp-for="Password"
+               type="password"
+               autocomplete="current-password" />
+    </div>
+
+    <button type="submit">Sign in</button>
+</form>
