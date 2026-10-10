@@ -1,0 +1,28 @@
+﻿@inherits LayoutComponentBase
+
+<div class="app-shell">
+    <header>
+        <h1>Boids Simulation</h1>
+        <p>Routing and layouts learning module</p>
+    </header>
+
+    <nav aria-label="Main navigation">
+        <NavLink href="/" Match="NavLinkMatch.All">
+            Home
+        </NavLink>
+        <NavLink href="/simulation" Match="NavLinkMatch.Prefix">
+            Simulation
+        </NavLink>
+        <NavLink href="/settings" Match="NavLinkMatch.Prefix">
+            Settings
+        </NavLink>
+    </nav>
+
+    <main>
+        @Body
+    </main>
+
+    <footer>
+        <p>Boids Learning Project</p>
+    </footer>
+</div>

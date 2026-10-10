@@ -1,0 +1,30 @@
+.app-shell {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 1.5rem;
+}
+
+header, footer {
+    padding: 1rem 0;
+}
+
+nav {
+    display: flex;
+    gap: 1rem;
+    padding: 1rem 0;
+    border-bottom: 1px solid #ccc;
+}
+
+nav a {
+    text-decoration: none;
+}
+
+nav a.active {
+    font-weight: bold;
+    text-decoration: underline;
+}
+
+main {
+    min-height: 18rem;
+    padding: 1.5rem 0;
+}

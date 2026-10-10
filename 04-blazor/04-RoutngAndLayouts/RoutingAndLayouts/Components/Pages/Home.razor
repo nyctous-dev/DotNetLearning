@@ -1,0 +1,39 @@
+﻿@page "/"
+@inject NavigationManager Navigation
+
+<PageTitle>Home</PageTitle>
+
+<h2>Home</h2>
+
+<p>Welcome to the Boids simulation application.</p>
+<p>Use the navigation links to visit the simulation and settings pages.</p>
+
+<button @onclick="OpenSimulation">
+    Open Simulation
+</button>
+
+<hr />
+
+<h3>Interactivity Check</h3>
+
+<p>Current count: @count</p>
+
+<button @onclick="IncrementCount">
+    Click to increment
+</button>
+
+@code {
+    private int count;
+
+    private void IncrementCount()
+    {
+        count++;
+    }
+}
+
+@code {
+    private void OpenSimulation()
+    {
+        Navigation.NavigateTo("/simulation");
+    }
+}

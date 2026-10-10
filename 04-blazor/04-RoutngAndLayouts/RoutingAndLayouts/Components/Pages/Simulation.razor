@@ -1,0 +1,32 @@
+@page "/simulation"
+@page "/simulation/{SimulationId:int}"
+
+<PageTitle>Simulation</PageTitle>
+
+<h2>Simulation</h2>
+
+@if (SimulationId is int id)
+{
+    <p>Viewing simulation ID: @id</p>
+}
+else
+{
+    <p>Viewing the current simulation.</p>
+}
+
+<p>Mode: @EffectiveMode</p>
+
+<p>
+    Try adding <code>?mode=paused</code> to the URL to change the displayed mode.
+</p>
+
+@code {
+    [Parameter]
+    public int? SimulationId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "mode")]
+    public string? Mode { get; set; }
+
+    private string EffectiveMode =>
+        string.IsNullOrWhiteSpace(Mode) ? "default" : Mode;
+}

@@ -417,4 +417,4 @@ Your component must satisfy all of the following requirements:
 
 
 
-![Blazor Fundamentals](EventsAndDataBinding.png)
+![Events And Data Binding](EventsAndDataBinding.png)

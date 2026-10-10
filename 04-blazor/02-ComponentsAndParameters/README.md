@@ -409,4 +409,4 @@ Your solution must satisfy all of the following requirements:
 10. **Keep responsibilities clear:** Components should render their own portion of the UI rather than duplicating the entire dashboard in each component.
 
 
-![Blazor Fundamentals](ComponentsAndParameters.png)
+![Components And Parameters](ComponentsAndParameters.png)
