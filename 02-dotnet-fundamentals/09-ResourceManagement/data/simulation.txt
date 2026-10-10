@@ -1,0 +1,4 @@
+Boids Simulation
+Boid 1: Position=(10, 20)
+Boid 2: Position=(30, 40)
+Boid 3: Position=(50, 60)
