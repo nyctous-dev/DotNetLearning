@@ -1,0 +1,5 @@
+{
+  "BoidCount": 100,
+  "MovementSpeed": 2,
+  "ShowTrails": false
+}

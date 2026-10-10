@@ -1,0 +1,173 @@
+@page "/persistence"
+@using BlazorPersistence.Models
+@using BlazorPersistence.Services
+@using Microsoft.JSInterop
+@inject SimulationSettingsStore SettingsStore
+
+<PageTitle>Simulation Settings</PageTitle>
+
+<h1>Simulation Settings</h1>
+
+<p>
+    Settings are saved in this browser's local storage and in a JSON file
+    inside the application directory.
+</p>
+
+@if (isLoading)
+{
+    <p>Loading saved settings...</p>
+}
+else
+{
+    <div class="mb-3">
+        <label for="boidCount" class="form-label">Boid count</label>
+        <input id="boidCount"
+               class="form-control"
+               type="number"
+               min="0"
+               @bind="settings.BoidCount"
+               disabled="@isBusy" />
+    </div>
+
+    <div class="mb-3">
+        <label for="movementSpeed" class="form-label">Movement speed</label>
+        <input id="movementSpeed"
+               class="form-control"
+               type="number"
+               min="0"
+               step="any"
+               @bind="settings.MovementSpeed"
+               disabled="@isBusy" />
+    </div>
+
+    <div class="form-check mb-3">
+        <input id="showTrails"
+               class="form-check-input"
+               type="checkbox"
+               @bind="settings.ShowTrails"
+               disabled="@isBusy" />
+        <label for="showTrails" class="form-check-label">
+            Show trails
+        </label>
+    </div>
+
+    <button class="btn btn-primary me-2"
+            @onclick="SaveAsync"
+            disabled="@isBusy">
+        Save settings
+    </button>
+
+    <button class="btn btn-secondary"
+            @onclick="LoadAsync"
+            disabled="@isBusy">
+        Reload saved settings
+    </button>
+
+    <button class="btn btn-danger ms-2"
+            @onclick="ClearAsync"
+            disabled="@isBusy">
+        Clear saved settings
+    </button>
+}
+
+<p class="mt-3" role="status">@statusMessage</p>
+
+@code {
+    private SimulationSettings settings = new();
+    private bool isLoading = true;
+    private bool isBusy;
+    private string statusMessage = string.Empty;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            settings = await SettingsStore.LoadAsync();
+            statusMessage = "Settings loaded. Missing or invalid saved data uses defaults.";
+        }
+        finally
+        {
+            isLoading = false;
+
+            // OnAfterRenderAsync does not automatically trigger another render.
+            StateHasChanged();
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (!settings.HasValidValues())
+        {
+            statusMessage =
+                "Invalid settings. Boid count and movement speed must be non-negative, and speed must be finite.";
+            return;
+        }
+
+        isBusy = true;
+
+        try
+        {
+            await SettingsStore.SaveAsync(settings);
+            statusMessage =
+                "Settings saved to localStorage and data/simulation-settings.json.";
+        }
+        catch (Exception exception) when (
+            exception is IOException or
+            UnauthorizedAccessException or
+            JSException)
+        {
+            statusMessage = $"Could not save settings: {exception.Message}";
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        isBusy = true;
+
+        try
+        {
+            settings = await SettingsStore.LoadAsync();
+            statusMessage = "Saved settings reloaded, or defaults restored if no valid data exists.";
+        }
+        catch (JSException exception)
+        {
+            statusMessage = $"Could not access browser storage: {exception.Message}";
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private async Task ClearAsync()
+    {
+        isBusy = true;
+
+        try
+        {
+            await SettingsStore.ClearAsync();
+            settings = new SimulationSettings();
+            statusMessage = "Saved settings cleared. Defaults restored.";
+        }
+        catch (Exception exception) when (
+            exception is IOException or
+            UnauthorizedAccessException or
+            JSException)
+        {
+            statusMessage = $"Could not clear all saved settings: {exception.Message}";
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+}
