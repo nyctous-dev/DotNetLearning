@@ -1,0 +1,35 @@
+﻿@page "/"
+@using ComponentsAndParameters.Components.Simulation
+
+<PageTitle>Boids Dashboard</PageTitle>
+
+<h1>Boids Simulation Dashboard</h1>
+
+<Panel>
+    <h2>Overview</h2>
+    <p>
+        This dashboard demonstrates reusable components and
+        parent-to-child parameter passing.
+    </p>
+</Panel>
+
+<BoidStatus
+    BoidCount="@boidCount"
+    IsRunning="@isRunning" />
+
+<SimulationSummary
+    Title="Main Simulation"
+    BoidCount="@boidCount"
+    MovementSpeed="@movementSpeed"
+    IsRunning="@isRunning" />
+
+<h2>Reusable Count Displays</h2>
+
+<BoidCountDisplay Count="@boidCount" />
+<BoidCountDisplay Count="25" />
+
+@code {
+    private int boidCount = 100;
+    private double movementSpeed = 2.5;
+    private bool isRunning = true;
+}

@@ -1,0 +1,10 @@
+<section class="card mb-3">
+    <div class="card-body">
+        @ChildContent
+    </div>
+</section>
+
+@code {
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+}

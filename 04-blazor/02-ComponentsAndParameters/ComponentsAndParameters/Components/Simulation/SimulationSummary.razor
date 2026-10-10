@@ -1,0 +1,38 @@
+<div class="card mb-3">
+    <div class="card-body">
+        <h3 class="card-title">@Title</h3>
+        <dl>
+            <dt>Boid count</dt>
+            <dd>@BoidCount</dd>
+
+            <dt>Movement speed</dt>
+            <dd>@MovementSpeed</dd>
+
+            <dt>Simulation state</dt>
+            <dd>@(IsRunning ? "Running" : "Paused")</dd>
+        </dl>
+
+        @if (showDetails)
+        {
+            <p class="text-muted">
+                Values are supplied by the parent dashboard.
+            </p>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter]
+    public int BoidCount { get; set; }
+
+    [Parameter]
+    public double MovementSpeed { get; set; }
+
+    [Parameter]
+    public bool IsRunning { get; set; }
+
+    private bool showDetails = true;
+}
