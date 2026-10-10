@@ -1,0 +1,29 @@
+@implements IDisposable
+@using StateManagementAndServices.Services
+@inject SimulationState State
+
+<h2>Simulation Status</h2>
+
+<p>
+    Status:
+    <strong>@(State.IsRunning ? "Running" : "Paused")</strong>
+</p>
+
+<p>Boid count: @State.BoidCount</p>
+
+@code {
+    protected override void OnInitialized()
+    {
+        State.OnChange += HandleStateChanged;
+    }
+
+    private void HandleStateChanged()
+    {
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        State.OnChange -= HandleStateChanged;
+    }
+}

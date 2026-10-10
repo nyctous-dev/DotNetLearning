@@ -1,0 +1,53 @@
+@using StateManagementAndServices.Services
+@inject SimulationState State
+
+<h2>Simulation Controls</h2>
+
+<button @onclick="ToggleRunning">
+    @(State.IsRunning ? "Pause Simulation" : "Start Simulation")
+</button>
+
+<div>
+    <label for="boid-count">Boid count</label>
+    <input id="boid-count"
+           type="number"
+           min="0"
+           step="1"
+           @bind="boidCountInput" />
+
+    <button @onclick="ApplyBoidCount">Apply Count</button>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(validationMessage))
+{
+    <p role="alert">@validationMessage</p>
+}
+
+@code {
+    private string boidCountInput = "100";
+    private string? validationMessage;
+
+    private void ToggleRunning()
+    {
+        State.SetRunning(!State.IsRunning);
+    }
+
+    private void ApplyBoidCount()
+    {
+        if (!int.TryParse(boidCountInput, out int count))
+        {
+            validationMessage = "Enter a valid whole-number boid count.";
+            return;
+        }
+
+        try
+        {
+            State.SetBoidCount(count);
+            validationMessage = null;
+        }
+        catch (ArgumentOutOfRangeException exception)
+        {
+            validationMessage = exception.Message;
+        }
+    }
+}
