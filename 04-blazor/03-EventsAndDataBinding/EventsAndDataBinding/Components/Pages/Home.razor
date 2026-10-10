@@ -1,0 +1,118 @@
+﻿@page "/"
+@using EventsAndDataBinding.Components.Controls
+@rendermode InteractiveServer
+
+<PageTitle>Events & Data Binding</PageTitle>
+
+<h1>Boids Simulation Controls</h1>
+
+<section>
+    <h2>Simulation settings</h2>
+
+    <div>
+        <label for="simulation-name">Simulation name</label>
+        <input id="simulation-name"
+               @bind="simulationName"
+               @bind:event="oninput" />
+    </div>
+
+    <p>Current name: @simulationName</p>
+
+    <SpeedControl Speed="@movementSpeed"
+                  SpeedChanged="HandleSpeedChanged" />
+
+    <p>Movement speed: @movementSpeed.ToString("0.0")</p>
+
+    <div>
+        <button @onclick="() => ChangeBoidCount(-1)"
+                disabled="@(boidCount == 0)">
+            Decrease boids
+        </button>
+
+        <button @onclick="() => ChangeBoidCount(1)">
+            Increase boids
+        </button>
+    </div>
+
+    <p>Boid count: @boidCount</p>
+
+    <div>
+        <label>
+            <input type="checkbox" @bind="isRunning" />
+            Run simulation
+        </label>
+    </div>
+
+    @if (isRunning)
+    {
+        <p role="status">Simulation is running.</p>
+    }
+    else
+    {
+        <p role="status">Simulation is stopped.</p>
+    }
+
+    <button @onclick="ResetSettings">Reset settings</button>
+</section>
+
+<section>
+    <h2>Asynchronous operation</h2>
+
+    <button @onclick="RunAsyncOperation" disabled="@isLoading">
+        @(isLoading ? "Updating..." : "Update simulation")
+    </button>
+
+    <p role="status">@operationStatus</p>
+</section>
+
+@code {
+    private string simulationName = "Boids";
+    private double movementSpeed = 2.5;
+    private int boidCount = 20;
+    private bool isRunning;
+    private bool isLoading;
+    private string operationStatus = "Ready.";
+
+    private void HandleSpeedChanged(double newSpeed)
+    {
+        if (double.IsFinite(newSpeed) && newSpeed >= 0)
+        {
+            movementSpeed = newSpeed;
+        }
+    }
+
+    private void ChangeBoidCount(int amount)
+    {
+        boidCount = Math.Max(0, boidCount + amount);
+    }
+
+    private void ResetSettings()
+    {
+        simulationName = "Boids";
+        movementSpeed = 2.5;
+        boidCount = 20;
+        isRunning = false;
+        operationStatus = "Ready.";
+    }
+
+    private async Task RunAsyncOperation()
+    {
+        if (isLoading)
+        {
+            return;
+        }
+
+        isLoading = true;
+        operationStatus = "Updating simulation...";
+
+        try
+        {
+            await Task.Delay(800);
+            operationStatus = "Simulation update completed.";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}
