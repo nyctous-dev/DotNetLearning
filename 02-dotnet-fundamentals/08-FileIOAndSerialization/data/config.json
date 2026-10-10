@@ -1,0 +1,5 @@
+{
+  "BoidCount": 150,
+  "MovementSpeed": 2.5,
+  "IsRunning": false
+}
