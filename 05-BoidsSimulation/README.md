@@ -1,5 +1,8 @@
 # 05 — Boids Simulation
 
+![Boids Simulation](BoidsSimulation.png)
+
+
 ## Project Overview
 
 Build a shared, real-time, browser-based Boids simulation using C#, .NET, ASP.NET Core, and Blazor.
