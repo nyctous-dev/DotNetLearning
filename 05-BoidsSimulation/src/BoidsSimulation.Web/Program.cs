@@ -7,6 +7,10 @@ using Microsoft.Extensions.Configuration;
 using BoidsSimulation.Application.Sessions;
 using BoidsSimulation.Web.Services;
 using BoidsSimulation.Web.Hubs;
+using BoidsSimulation.Web.Data;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.UI;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -79,6 +83,35 @@ builder.Services
         options.PayloadSerializerOptions.IncludeFields = true;
     });
 
+var identityConnection =
+    builder.Configuration.GetConnectionString("IdentityConnection")
+    ?? throw new InvalidOperationException(
+        "The IdentityConnection connection string is missing.");
+
+builder.Services.AddDbContext<ApplicationDbContext>(options =>
+    options.UseSqlite(identityConnection));
+
+builder.Services
+    .AddDefaultIdentity<IdentityUser>(options =>
+    {
+        options.SignIn.RequireConfirmedAccount = false;
+
+        options.User.RequireUniqueEmail = true;
+
+        options.Password.RequiredLength = 8;
+        options.Password.RequireDigit = true;
+        options.Password.RequireLowercase = true;
+        options.Password.RequireUppercase = true;
+        options.Password.RequireNonAlphanumeric = false;
+
+        options.Lockout.MaxFailedAccessAttempts = 5;
+        options.Lockout.DefaultLockoutTimeSpan =
+            TimeSpan.FromMinutes(15);
+    })
+    .AddEntityFrameworkStores<ApplicationDbContext>();
+
+builder.Services.AddRazorPages();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -87,6 +120,9 @@ if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
     app.UseHsts();
 }
+
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.UseHttpsRedirection();
 app.UseAntiforgery();
@@ -101,6 +137,8 @@ app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
 app.MapHub<SimulationHub>("/hubs/simulation");
+
+app.MapRazorPages();
 
 app.Run();
 
