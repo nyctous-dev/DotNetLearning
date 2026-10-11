@@ -12,11 +12,11 @@
     <link rel="stylesheet" href="@Assets["BoidsSimulation.Web.styles.css"]" />
     <ImportMap />
     <link rel="icon" type="image/png" href="favicon.png" />
-    <HeadOutlet />
+    <HeadOutlet @rendermode="Microsoft.AspNetCore.Components.Web.RenderMode.InteractiveServer" />
 </head>
 
 <body>
-    <Routes />
+    <Routes @rendermode="Microsoft.AspNetCore.Components.Web.RenderMode.InteractiveServer" />
     <ReconnectModal />
 
     <script src="@Assets["lib/signalr/signalr.min.js"]"></script>]

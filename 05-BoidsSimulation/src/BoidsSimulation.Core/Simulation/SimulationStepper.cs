@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Numerics;
 using BoidsSimulation.Core.Models;
@@ -56,12 +57,10 @@ public readonly record struct SimulationStepWorkMetrics(
         P95EvaluationsPerBoid: 0,
         MaximumEvaluationsPerBoid: 0);
 }
-
 public sealed class SimulationStepper
 {
     private const float Epsilon = 1e-6f;
     private const int ChunksPerProcessor = 4;
-
     private readonly SimulationSettings _settings;
     private readonly BoidSpatialGrid _grid;
     private readonly int _parallelChunkCapacity;
@@ -72,6 +71,7 @@ public sealed class SimulationStepper
     private readonly float _cohesionRadiusSquared;
     private readonly float _searchRadius;
     private readonly float _searchRadiusSquared;
+    private readonly float _interactionRadiusSquared;
     private readonly int[] _evaluationHistogram;
     private Boid[] _populationBuffer = Array.Empty<Boid>();
     private Vector2[] _nextVelocities = Array.Empty<Vector2>();
@@ -89,7 +89,6 @@ public sealed class SimulationStepper
         public long CohesionMatches;
         public int BoidsWithZeroEvaluatedNeighbors;
         public int BoidsAtEvaluationLimit;
-
         public void Add(in SteeringWorkAccumulator other)
         {
             GridCandidatesReturned += other.GridCandidatesReturned;
@@ -129,14 +128,14 @@ public sealed class SimulationStepper
                 settings.AlignmentRadius,
                 settings.CohesionRadius));
         _searchRadiusSquared = _searchRadius * _searchRadius;
+        _interactionRadiusSquared =
+            settings.InteractionRadius * settings.InteractionRadius;
         // More chunks than processors let the scheduler balance uneven boid
         // workloads without sharing per-chunk scratch buffers or counters.
         _parallelChunkCapacity =
             Math.Max(1, Environment.ProcessorCount) * ChunksPerProcessor;
-
         _candidateBuffers = new int[_parallelChunkCapacity][];
         _chunkWork = new SteeringWorkAccumulator[_parallelChunkCapacity];
-
         for (var chunkIndex = 0;
              chunkIndex < _candidateBuffers.Length;
              chunkIndex++)
@@ -144,7 +143,6 @@ public sealed class SimulationStepper
             _candidateBuffers[chunkIndex] =
                 new int[settings.MaxNeighborEvaluationsPerBoid + 1];
         }
-
         _evaluationHistogram =
             new int[settings.MaxNeighborEvaluationsPerBoid + 1];
         _grid = new BoidSpatialGrid(
@@ -155,7 +153,14 @@ public sealed class SimulationStepper
     }
     public void Step(SimulationState state)
     {
+        Step(state, Array.Empty<BoidInteraction>());
+    }
+    public void Step(
+        SimulationState state,
+        IReadOnlyList<BoidInteraction> interactions)
+    {
         ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(interactions);
         var totalStart = Stopwatch.GetTimestamp();
         var populationCount = state.BoidCount;
         if (populationCount == 0)
@@ -188,7 +193,6 @@ public sealed class SimulationStepper
         // More ranges than processors allow the scheduler to balance uneven
         // workloads while preserving a read-only population snapshot.
         phaseStart = Stopwatch.GetTimestamp();
-
         var chunkCount = Math.Min(_parallelChunkCapacity, populationCount);
         Parallel.For(0, chunkCount, chunkIndex =>
         {
@@ -196,7 +200,6 @@ public sealed class SimulationStepper
             var candidateBuffer = _candidateBuffers[chunkIndex];
             var rangeStart = (int)((long)populationCount * chunkIndex / chunkCount);
             var rangeEnd = (int)((long)populationCount * (chunkIndex + 1) / chunkCount);
-
             for (var i = rangeStart; i < rangeEnd; i++)
             {
                 var boid = _populationBuffer[i];
@@ -206,77 +209,62 @@ public sealed class SimulationStepper
                     candidateBuffer,
                     ref localWork,
                     out var evaluationsForBoid);
-
+                steering += CalculateInteractionSteering(boid, interactions);
                 _evaluationsPerBoid[i] = evaluationsForBoid;
-
                 if (steering == Vector2.Zero)
                 {
                     _nextVelocities[i] = boid.Velocity;
                     continue;
                 }
-
                 steering = ClampMagnitude(
                     steering,
                     _settings.MaxSteeringForce);
-
                 var nextVelocity =
                     boid.Velocity +
                     steering * _settings.FixedTimeStep;
-
                 _nextVelocities[i] = ClampMagnitude(
                     nextVelocity,
                     _settings.MaxSpeed);
             }
-
             _chunkWork[chunkIndex] = localWork;
         });
-
         var work = new SteeringWorkAccumulator();
         for (var chunkIndex = 0; chunkIndex < chunkCount; chunkIndex++)
         {
             work.Add(_chunkWork[chunkIndex]);
         }
-
         // Build the evaluation distribution after parallel work. This avoids
         // shared histogram increments and keeps the percentile calculation exact.
         var minimumEvaluations = int.MaxValue;
         var maximumEvaluations = 0;
-
         for (var i = 0; i < populationCount; i++)
         {
             var evaluationsForBoid = _evaluationsPerBoid[i];
             _evaluationHistogram[evaluationsForBoid]++;
-
             if (evaluationsForBoid < minimumEvaluations)
             {
                 minimumEvaluations = evaluationsForBoid;
             }
-
             if (evaluationsForBoid > maximumEvaluations)
             {
                 maximumEvaluations = evaluationsForBoid;
             }
-
             if (evaluationsForBoid == 0)
             {
                 work.BoidsWithZeroEvaluatedNeighbors++;
             }
-
             if (evaluationsForBoid >= _settings.MaxNeighborEvaluationsPerBoid)
             {
                 work.BoidsAtEvaluationLimit++;
             }
         }
-
         var steeringCalculationDuration =
             Stopwatch.GetElapsedTime(phaseStart);
-
         LastStepWorkMetrics = CreateWorkMetrics(
             populationCount,
             work,
             minimumEvaluations,
             maximumEvaluations);
-
         // Phase 4: Commit the calculated velocities.
         phaseStart = Stopwatch.GetTimestamp();
         for (var i = 0; i < populationCount; i++)
@@ -421,6 +409,42 @@ public sealed class SimulationStepper
             separation * _settings.SeparationWeight +
             alignment * _settings.AlignmentWeight +
             cohesion * _settings.CohesionWeight;
+    }
+    private Vector2 CalculateInteractionSteering(
+        Boid boid,
+        IReadOnlyList<BoidInteraction> interactions)
+    {
+        if (interactions.Count == 0 || _interactionRadiusSquared <= 0f)
+        {
+            return Vector2.Zero;
+        }
+        var totalSteering = Vector2.Zero;
+        var interactionRadius = _settings.InteractionRadius;
+        for (var i = 0; i < interactions.Count; i++)
+        {
+            var interaction = interactions[i];
+            // Use the shortest wrapped offset so interactions work across
+            // the world boundary in the toroidal simulation.
+            var offset = GetWrappedOffset(boid.Position, interaction.Position);
+            var distanceSquared = offset.LengthSquared();
+            if (distanceSquared <= Epsilon ||
+                distanceSquared > _interactionRadiusSquared)
+            {
+                continue;
+            }
+            var distance = MathF.Sqrt(distanceSquared);
+            var falloff = 1f - distance / interactionRadius;
+            var direction = offset / distance;
+            totalSteering += interaction.Mode switch
+            {
+                BoidInteractionMode.Attract =>
+                    direction * (_settings.AttractionForce * falloff),
+                BoidInteractionMode.Repel =>
+                    -direction * (_settings.RepulsionForce * falloff),
+                _ => Vector2.Zero
+            };
+        }
+        return totalSteering;
     }
     private SimulationStepWorkMetrics CreateWorkMetrics(
         int populationCount,
@@ -568,7 +592,6 @@ public sealed class SimulationStepper
                 ref _nextVelocities,
                 populationCount);
         }
-
         if (_evaluationsPerBoid.Length != populationCount)
         {
             Array.Resize(

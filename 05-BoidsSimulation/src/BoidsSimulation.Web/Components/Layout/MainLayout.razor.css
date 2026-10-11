@@ -281,6 +281,23 @@
     cursor: pointer;
 }
 
+.color-setting {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.color-setting input[type="color"] {
+    width: 48px;
+    height: 34px;
+    padding: 3px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: #101b28;
+    cursor: pointer;
+}
+
 .action-setting {
     min-width: 0;
     margin: 0;

@@ -73,7 +73,7 @@ builder.Services.AddSingleton<SimulationLoop>();
 // Start the simulation with the ASP.NET Core host.
 builder.Services.AddHostedService<SimulationBackgroundService>();
 builder.Services.AddHostedService<SimulationSnapshotBroadcaster>();
-builder.Services.AddSingleton<SimulationConnectionStatus>();
+builder.Services.AddScoped<SimulationConnectionStatus>();
 
 // Configure SignalR JSON serialization for System.Numerics.Vector2.
 builder.Services
@@ -113,6 +113,9 @@ builder.Services
 builder.Services.AddCascadingAuthenticationState();
 
 builder.Services.AddRazorPages();
+
+builder.Services.AddScoped<SimulationPreferencesService>();
+builder.Services.AddScoped<SimulationVisualPreferencesState>();
 
 var app = builder.Build();
 

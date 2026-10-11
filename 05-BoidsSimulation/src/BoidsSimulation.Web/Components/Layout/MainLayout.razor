@@ -1,7 +1,14 @@
 ﻿@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.JSInterop
 @inherits LayoutComponentBase
-@implements IDisposable
+@implements IAsyncDisposable
+
+@inject IJSRuntime JS
+@inject ILogger<MainLayout> Logger
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject BoidsSimulation.Web.Services.SimulationPreferencesService PreferencesService
 @inject BoidsSimulation.Web.Services.SimulationConnectionStatus ConnectionStatus
+@inject BoidsSimulation.Web.Services.SimulationVisualPreferencesState VisualPreferences
 
 <div class="app-shell">
     <header class="app-header">
@@ -27,7 +34,6 @@
         </a>
 
         <div class="header-actions">
-            @* Appearance remains available to guests and signed-in users. *@
             <details class="header-menu" name="header-menu">
                 <summary>
                     <span class="menu-icon" aria-hidden="true">◈</span>
@@ -41,23 +47,24 @@
                         <h2>Visual settings</h2>
                     </div>
 
-                    <label class="setting-field" for="boid-color">
+                    <label class="setting-field color-setting" for="boid-color">
                         <span>Boid color</span>
-                        <select id="boid-color" name="boid-color">
-                            <option value="cyan">Electric cyan</option>
-                            <option value="white">White</option>
-                            <option value="amber">Amber</option>
-                            <option value="green">Mint green</option>
-                        </select>
+                        <input
+                            id="boid-color"
+                            name="boid-color"
+                            type="color"
+                            value="@VisualPreferences.Current.BoidColor"
+                            @onchange="OnBoidColorChanged" />
                     </label>
 
-                    <label class="setting-field" for="boid-size">
-                        <span>Boid size</span>
-                        <select id="boid-size" name="boid-size">
-                            <option value="small">Small</option>
-                            <option value="medium" selected>Medium</option>
-                            <option value="large">Large</option>
-                        </select>
+                    <label class="setting-field color-setting" for="background-color">
+                        <span>Background color</span>
+                        <input
+                            id="background-color"
+                            name="background-color"
+                            type="color"
+                            value="@VisualPreferences.Current.BackgroundColor"
+                            @onchange="OnBackgroundColorChanged" />
                     </label>
 
                     <label class="check-setting" for="show-trails">
@@ -65,19 +72,22 @@
                             <strong>Motion trails</strong>
                             <small>Show movement history</small>
                         </span>
+
                         <input
                             id="show-trails"
                             name="show-trails"
-                            type="checkbox" />
+                            type="checkbox"
+                            checked="@VisualPreferences.Current.ShowTrails"
+                            @onchange="OnShowTrailsChanged" />
                     </label>
 
                     <p class="panel-note">
-                        Visual settings will be connected to the renderer next.
+                        Changes apply immediately to this simulation.
+                        Signed-in users' preferences are saved to their accounts.
                     </p>
                 </div>
             </details>
 
-            @* The entire interaction dropdown is restricted to signed-in users. *@
             <AuthorizeView>
                 <Authorized>
                     <details class="header-menu" name="header-menu">
@@ -94,29 +104,38 @@
                             </div>
 
                             <fieldset class="action-setting">
-                                <legend>Right-click action</legend>
+                                <legend>Middle mouse action</legend>
 
                                 <div class="segmented-control">
                                     <input
                                         type="radio"
-                                        id="right-click-repel"
-                                        name="right-click-action"
-                                        value="repel"
-                                        checked />
-                                    <label for="right-click-repel">Repel</label>
+                                        id="middle-mouse-repel"
+                                        name="middle-mouse-action"
+                                        value="Repel"
+                                        checked="@(_interactionMode == "Repel")"
+                                        @onchange="OnInteractionModeChanged" />
+
+                                    <label for="middle-mouse-repel">
+                                        Repel
+                                    </label>
 
                                     <input
                                         type="radio"
-                                        id="right-click-attract"
-                                        name="right-click-action"
-                                        value="attract" />
-                                    <label for="right-click-attract">Attract</label>
+                                        id="middle-mouse-attract"
+                                        name="middle-mouse-action"
+                                        value="Attract"
+                                        checked="@(_interactionMode == "Attract")"
+                                        @onchange="OnInteractionModeChanged" />
+
+                                    <label for="middle-mouse-attract">
+                                        Attract
+                                    </label>
                                 </div>
                             </fieldset>
 
                             <p class="panel-note">
-                                The selected action will be used when mouse interactions
-                                are connected to the simulation.
+                                Hold the middle mouse button over the simulation
+                                to apply the selected action. Release it to stop.
                             </p>
                         </div>
                     </details>
@@ -159,9 +178,85 @@
 </div>
 
 @code {
+    private IJSObjectReference? _simulationModule;
+
+    private string _interactionMode = "Repel";
+
+    // A scoped EF Core DbContext must not service concurrent operations.
+    // Serialize preference saves and save the most recent state each time.
+    private readonly SemaphoreSlim _preferenceSaveLock = new(1, 1);
+
     protected override void OnInitialized()
     {
         ConnectionStatus.Changed += HandleConnectionStatusChanged;
+        VisualPreferences.Changed += HandleVisualPreferencesChanged;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAuthenticatedPreferencesAsync();
+    }
+
+    private async Task LoadAuthenticatedPreferencesAsync()
+    {
+        try
+        {
+            var authenticationState =
+                await AuthenticationStateProvider.GetAuthenticationStateAsync();
+
+            var principal = authenticationState.User;
+
+            if (principal.Identity?.IsAuthenticated != true)
+            {
+                return;
+            }
+
+            var saved = await PreferencesService.GetAsync(principal);
+
+            // Applying loaded values updates the shared in-memory state.
+            // This does not invoke the UI's save handlers.
+            VisualPreferences.SetBoidColor(saved.BoidColor);
+            VisualPreferences.SetBackgroundColor(saved.BackgroundColor);
+            VisualPreferences.SetShowTrails(saved.ShowTrails);
+
+            Logger.LogDebug(
+                "Loaded visual preferences for the authenticated user.");
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(
+                exception,
+                "Failed to load the authenticated user's simulation preferences.");
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            _simulationModule = await JS.InvokeAsync<IJSObjectReference>(
+                "import",
+                "./js/simulationClient.js");
+
+            await _simulationModule.InvokeVoidAsync(
+                "setInteractionMode",
+                _interactionMode);
+        }
+        catch (JSDisconnectedException)
+        {
+            // The browser circuit disconnected during initialization.
+        }
+        catch (JSException exception)
+        {
+            Logger.LogError(
+                exception,
+                "Failed to initialize the simulation interaction mode.");
+        }
     }
 
     private void HandleConnectionStatusChanged()
@@ -169,8 +264,135 @@
         _ = InvokeAsync(StateHasChanged);
     }
 
-    public void Dispose()
+    private void HandleVisualPreferencesChanged()
+    {
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OnBoidColorChanged(ChangeEventArgs args)
+    {
+        VisualPreferences.SetBoidColor(args.Value?.ToString());
+
+        await SavePreferencesIfAuthenticatedAsync();
+    }
+
+    private async Task OnBackgroundColorChanged(ChangeEventArgs args)
+    {
+        VisualPreferences.SetBackgroundColor(args.Value?.ToString());
+
+        await SavePreferencesIfAuthenticatedAsync();
+    }
+
+    private async Task OnShowTrailsChanged(ChangeEventArgs args)
+    {
+        if (!bool.TryParse(args.Value?.ToString(), out var showTrails))
+        {
+            return;
+        }
+
+        VisualPreferences.SetShowTrails(showTrails);
+
+        await SavePreferencesIfAuthenticatedAsync();
+    }
+
+    private async Task SavePreferencesIfAuthenticatedAsync()
+    {
+        await _preferenceSaveLock.WaitAsync();
+
+        try
+        {
+            var authenticationState =
+                await AuthenticationStateProvider.GetAuthenticationStateAsync();
+
+            var principal = authenticationState.User;
+
+            // Guests do not have an account record to update.
+            if (principal.Identity?.IsAuthenticated != true)
+            {
+                return;
+            }
+
+            // Read Current only after acquiring the lock, so we persist
+            // the latest state rather than an outdated event's values.
+            var current = VisualPreferences.Current;
+
+            var preferences = new BoidsSimulation.Web.Services
+                .SimulationPreferences(
+                    current.BoidColor,
+                    current.BackgroundColor,
+                    current.ShowTrails);
+
+            await PreferencesService.SaveAsync(
+                principal,
+                preferences);
+
+            Logger.LogDebug(
+                "Saved simulation visual preferences for the authenticated user.");
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(
+                exception,
+                "Failed to save the authenticated user's simulation preferences.");
+        }
+        finally
+        {
+            _preferenceSaveLock.Release();
+        }
+    }
+
+    private async Task OnInteractionModeChanged(ChangeEventArgs args)
+    {
+        var selectedMode = args.Value?.ToString();
+
+        if (selectedMode is not ("Attract" or "Repel") ||
+            _interactionMode == selectedMode)
+        {
+            return;
+        }
+
+        var previousMode = _interactionMode;
+        _interactionMode = selectedMode;
+
+        try
+        {
+            _simulationModule ??= await JS.InvokeAsync<IJSObjectReference>(
+                "import",
+                "./js/simulationClient.js");
+
+            await _simulationModule.InvokeVoidAsync(
+                "setInteractionMode",
+                _interactionMode);
+        }
+        catch (JSDisconnectedException)
+        {
+            // The browser circuit disconnected while applying the selection.
+        }
+        catch (JSException exception)
+        {
+            _interactionMode = previousMode;
+
+            Logger.LogError(
+                exception,
+                "Failed to change the simulation interaction mode.");
+        }
+    }
+
+    public async ValueTask DisposeAsync()
     {
         ConnectionStatus.Changed -= HandleConnectionStatusChanged;
+        VisualPreferences.Changed -= HandleVisualPreferencesChanged;
+
+        if (_simulationModule is not null)
+        {
+            try
+            {
+                await _simulationModule.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+                // The browser circuit is already disconnected.
+            }
+        }
     }
 }
