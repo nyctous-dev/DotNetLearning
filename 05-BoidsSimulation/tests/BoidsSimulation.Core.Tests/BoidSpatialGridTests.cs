@@ -328,6 +328,70 @@ public class BoidSpatialGridTests
         Assert.Throws<ArgumentException>(action);
     }
 
+    [Fact]
+    public void QueryNeighborhood_BufferOverloadReturnsCandidatesWithoutExceedingCapacity()
+    {
+        // Arrange
+        var boids = Enumerable
+            .Range(1, 10)
+            .Select(id => CreateBoid(id, Vector2.Zero))
+            .ToArray();
+
+        var grid = CreateGrid(boids);
+        var buffer = new int[3];
+
+        // Act
+        var count = grid.QueryNeighborhood(
+            center: Vector2.Zero,
+            radius: 10f,
+            destination: buffer);
+
+        // Assert
+        Assert.Equal(3, count);
+
+        var returnedIds = buffer
+            .Take(count)
+            .ToArray();
+
+        Assert.Equal(3, returnedIds.Distinct().Count());
+
+        foreach (var id in returnedIds)
+        {
+            Assert.Contains(boids, boid => boid.Id == id);
+        }
+    }
+
+    [Fact]
+    public void QueryNeighborhood_BufferOverloadReturnsZeroForEmptyBuffer()
+    {
+        // Arrange
+        var boids = new[]
+        {
+            CreateBoid(1, Vector2.Zero)
+        };
+
+        var grid = CreateGrid(boids);
+        var buffer = Array.Empty<int>();
+
+        // Act
+        var count = grid.QueryNeighborhood(
+            center: Vector2.Zero,
+            radius: 10f,
+            destination: buffer);
+
+        // Assert
+        Assert.Equal(0, count);
+    }
+
+
+
+
+
+
+
+
+
+
     private static BoidSpatialGrid CreateGrid(IReadOnlyList<Boid> boids)
     {
         return new BoidSpatialGrid(

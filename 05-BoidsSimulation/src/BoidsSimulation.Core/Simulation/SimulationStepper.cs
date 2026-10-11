@@ -7,6 +7,12 @@ namespace BoidsSimulation.Core.Simulation;
 public sealed class SimulationStepper
 {
     private readonly SimulationSettings _settings;
+    private readonly BoidSpatialGrid _grid;
+    private readonly Dictionary<int, Boid> _boidsById = new();
+    private readonly int[] _candidateBuffer;
+
+    private Boid[] _populationBuffer = Array.Empty<Boid>();
+    private Vector2[] _nextVelocities = Array.Empty<Vector2>();
 
     public SimulationStepper(
         SimulationSettings settings,
@@ -18,49 +24,64 @@ public sealed class SimulationStepper
         settings.Validate(limits);
 
         _settings = settings;
+
+        _grid = new BoidSpatialGrid(
+            settings.WorldWidth,
+            settings.WorldHeight,
+            settings.CellSize,
+            Array.Empty<Boid>());
+
+        _candidateBuffer = new int[
+            settings.MaxNeighborEvaluationsPerBoid + 1];
     }
 
     public void Step(SimulationState state)
     {
         ArgumentNullException.ThrowIfNull(state);
 
-        var population = state.Boids.ToArray();
+        var populationCount = state.BoidCount;
 
-        if (population.Length == 0)
+        if (populationCount == 0)
         {
             return;
         }
 
-        // Capture the state at the beginning of the tick.
-        var snapshot = population
-            .Select(boid => new Boid(
-                boid.Id,
-                boid.Position,
-                boid.Velocity))
-            .ToArray();
+        EnsureCapacity(populationCount);
 
-        var boidsById = snapshot.ToDictionary(boid => boid.Id);
+        var index = 0;
 
-        var grid = new BoidSpatialGrid(
-            _settings.WorldWidth,
-            _settings.WorldHeight,
-            _settings.CellSize,
-            snapshot);
-
-        var nextVelocities = new Vector2[population.Length];
-
-        for (var i = 0; i < snapshot.Length; i++)
+        foreach (var boid in state.Boids)
         {
-            var boid = snapshot[i];
+            _populationBuffer[index++] = boid;
+        }
 
-            var steering = CalculateSteering(
-                boid,
-                grid,
-                boidsById);
+        var population = new ArraySegment<Boid>(
+            _populationBuffer,
+            0,
+            populationCount);
+
+        // Rebuild the reusable grid once per tick. No boid positions or
+        // velocities are changed until all steering calculations finish.
+        _grid.Rebuild(population);
+
+        _boidsById.Clear();
+
+        for (var i = 0; i < populationCount; i++)
+        {
+            var boid = _populationBuffer[i];
+            _boidsById.Add(boid.Id, boid);
+        }
+
+        // Calculate every new velocity from the same start-of-tick state.
+        for (var i = 0; i < populationCount; i++)
+        {
+            var boid = _populationBuffer[i];
+
+            var steering = CalculateSteering(boid);
 
             if (steering == Vector2.Zero)
             {
-                nextVelocities[i] = boid.Velocity;
+                _nextVelocities[i] = boid.Velocity;
                 continue;
             }
 
@@ -69,17 +90,18 @@ public sealed class SimulationStepper
                 _settings.MaxSteeringForce);
 
             var nextVelocity =
-                boid.Velocity + steering * _settings.FixedTimeStep;
+                boid.Velocity +
+                steering * _settings.FixedTimeStep;
 
-            nextVelocities[i] = ClampMagnitude(
+            _nextVelocities[i] = ClampMagnitude(
                 nextVelocity,
                 _settings.MaxSpeed);
         }
 
-        // Commit velocities only after all steering calculations finish.
-        for (var i = 0; i < population.Length; i++)
+        // Commit velocities only after every steering calculation finishes.
+        for (var i = 0; i < populationCount; i++)
         {
-            population[i].Velocity = nextVelocities[i];
+            _populationBuffer[i].Velocity = _nextVelocities[i];
         }
 
         var worldWidth = (float)_settings.WorldWidth;
@@ -88,8 +110,11 @@ public sealed class SimulationStepper
         var halfHeight = worldHeight / 2f;
         var timeStep = _settings.FixedTimeStep;
 
-        foreach (var boid in population)
+        // Move all boids using their newly calculated velocities.
+        for (var i = 0; i < populationCount; i++)
         {
+            var boid = _populationBuffer[i];
+
             var nextPosition =
                 boid.Position + boid.Velocity * timeStep;
 
@@ -99,10 +124,7 @@ public sealed class SimulationStepper
         }
     }
 
-    private Vector2 CalculateSteering(
-        Boid boid,
-        BoidSpatialGrid grid,
-        IReadOnlyDictionary<int, Boid> boidsById)
+    private Vector2 CalculateSteering(Boid boid)
     {
         var searchRadius = MathF.Max(
             _settings.SeparationRadius,
@@ -115,15 +137,10 @@ public sealed class SimulationStepper
             return Vector2.Zero;
         }
 
-        // One spatial query and one shared candidate-evaluation budget
-        // for all three behaviors.
-        var candidateLimit =
-            _settings.MaxNeighborEvaluationsPerBoid + 1;
-
-        var candidateIds = grid.QueryNeighborhood(
+        var candidateCount = _grid.QueryNeighborhood(
             boid.Position,
             searchRadius,
-            candidateLimit);
+            _candidateBuffer.AsSpan());
 
         var separationDirection = Vector2.Zero;
         var alignmentVelocitySum = Vector2.Zero;
@@ -142,8 +159,10 @@ public sealed class SimulationStepper
         var cohesionRadiusSquared =
             _settings.CohesionRadius * _settings.CohesionRadius;
 
-        foreach (var candidateId in candidateIds)
+        for (var i = 0; i < candidateCount; i++)
         {
+            var candidateId = _candidateBuffer[i];
+
             if (candidateId == boid.Id)
             {
                 continue;
@@ -157,7 +176,7 @@ public sealed class SimulationStepper
 
             evaluatedNeighbors++;
 
-            var neighbor = boidsById[candidateId];
+            var neighbor = _boidsById[candidateId];
 
             var offset = GetWrappedOffset(
                 boid.Position,
@@ -169,7 +188,6 @@ public sealed class SimulationStepper
                 distanceSquared > 0f &&
                 distanceSquared <= separationRadiusSquared)
             {
-                // Closer neighbors contribute more strongly.
                 separationDirection -= offset / distanceSquared;
             }
 
@@ -183,8 +201,6 @@ public sealed class SimulationStepper
             if (_settings.CohesionRadius > 0f &&
                 distanceSquared <= cohesionRadiusSquared)
             {
-                // Offset is relative to this boid and uses the shortest
-                // wrapped displacement across world boundaries.
                 cohesionOffsetSum += offset;
                 cohesionNeighborCount++;
             }
@@ -267,7 +283,6 @@ public sealed class SimulationStepper
             return Vector2.Zero;
         }
 
-        // Seek toward the average position of eligible neighbors.
         var desiredVelocity =
             Vector2.Normalize(averageOffset) * _settings.MaxSpeed;
 
@@ -302,6 +317,23 @@ public sealed class SimulationStepper
         }
 
         return offset;
+    }
+
+    private void EnsureCapacity(int requiredCapacity)
+    {
+        if (_populationBuffer.Length >= requiredCapacity)
+        {
+            return;
+        }
+
+        var newCapacity = _populationBuffer.Length == 0
+            ? requiredCapacity
+            : Math.Max(
+                requiredCapacity,
+                _populationBuffer.Length * 2);
+
+        Array.Resize(ref _populationBuffer, newCapacity);
+        Array.Resize(ref _nextVelocities, newCapacity);
     }
 
     private static Vector2 ClampMagnitude(

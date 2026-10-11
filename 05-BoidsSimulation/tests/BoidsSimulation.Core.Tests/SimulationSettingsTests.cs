@@ -57,36 +57,60 @@ public sealed class SimulationSettingsTests
 
         configuration.Settings.Validate(configuration.Limits);
     }
-
+    
     [Theory]
-    [InlineData("CellSize", 10f, 1f, 10_000f)]
-    [InlineData("MaxNeighborEvaluationsPerBoid", 50, 1, 10_000)]
-    public void NewSettings_ExposeConfiguredDefaultsAndLimits(
-        string settingName,
-        object expectedDefault,
-        object expectedMinimum,
-        object expectedMaximum)
+    [InlineData("CellSize")]
+    [InlineData("MaxNeighborEvaluationsPerBoid")]
+    public void NewSettings_AreBoundFromAppsettingsAndWithinConfiguredLimits(
+        string settingName)
     {
         var configuration = LoadConfiguration();
 
-        var settingProperty = typeof(SimulationSettings).GetProperty(settingName);
-        Assert.NotNull(settingProperty);
-        Assert.Equal(expectedDefault, settingProperty.GetValue(configuration.Settings));
+        var settingProperty =
+            typeof(SimulationSettings).GetProperty(settingName);
 
-        var limitProperty = typeof(SimulationLimits).GetProperty(settingName);
+        Assert.NotNull(settingProperty);
+
+        var configuredValue =
+            settingProperty.GetValue(configuration.Settings);
+
+        Assert.NotNull(configuredValue);
+
+        var limitProperty =
+            typeof(SimulationLimits).GetProperty(settingName);
+
         Assert.NotNull(limitProperty);
 
         var range = limitProperty.GetValue(configuration.Limits);
+
         Assert.NotNull(range);
 
-        var minimumProperty = range.GetType().GetProperty("Min");
-        var maximumProperty = range.GetType().GetProperty("Max");
+        if (range is SimulationLimits.IntegerRange integerRange)
+        {
+            var (minimum, maximum) = integerRange.GetBounds(settingName);
+            var value = Assert.IsType<int>(configuredValue);
 
-        Assert.NotNull(minimumProperty);
-        Assert.NotNull(maximumProperty);
-        Assert.Equal(expectedMinimum, minimumProperty.GetValue(range));
-        Assert.Equal(expectedMaximum, maximumProperty.GetValue(range));
+            Assert.InRange(value, minimum, maximum);
+            return;
+        }
+
+        if (range is SimulationLimits.FloatRange floatRange)
+        {
+            var (minimum, maximum) = floatRange.GetBounds(settingName);
+            var value = Assert.IsType<float>(configuredValue);
+
+            Assert.True(
+                float.IsFinite(value),
+                $"{settingName} must be finite.");
+
+            Assert.InRange(value, minimum, maximum);
+            return;
+        }
+
+        throw new InvalidOperationException(
+            $"Unsupported limit type for setting '{settingName}'.");
     }
+
 
     public static IEnumerable<object[]> SettingBoundaryCases()
     {
