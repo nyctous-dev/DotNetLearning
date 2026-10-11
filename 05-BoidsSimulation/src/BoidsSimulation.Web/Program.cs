@@ -94,7 +94,12 @@ builder.Services.AddSingleton<SimulationLoop>();
 // Start the simulation with the ASP.NET Core host.
 builder.Services.AddHostedService<SimulationBackgroundService>();
 
-builder.Services.AddSignalR();
+builder.Services
+    .AddSignalR()
+    .AddJsonProtocol(options =>
+    {
+        options.PayloadSerializerOptions.IncludeFields = true;
+    });
 
 var app = builder.Build();
 
