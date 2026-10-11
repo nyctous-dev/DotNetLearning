@@ -26,6 +26,7 @@ public sealed class SimulationLoopTests
 
         MaxSpeed = 10f,
         MaxSteeringForce = 5f,
+        WanderStrength = 0f,
         AttractionForce = 5f,
         RepulsionForce = 5f,
         InteractionRadius = 10f,
@@ -133,6 +134,7 @@ public sealed class SimulationLoopTests
 
             MaxSpeed = floatRange,
             MaxSteeringForce = floatRange,
+            WanderStrength = floatRange,
             AttractionForce = floatRange,
             RepulsionForce = floatRange,
             InteractionRadius = floatRange,

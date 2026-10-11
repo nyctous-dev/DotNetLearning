@@ -26,6 +26,7 @@ public sealed class SimulationSessionTests
 
         MaxSpeed = 10f,
         MaxSteeringForce = 5f,
+        WanderStrength = 0f,
         AttractionForce = 5f,
         RepulsionForce = 5f,
         InteractionRadius = 10f,
@@ -109,7 +110,8 @@ public sealed class SimulationSessionTests
         var (session, _) = CreateSettingsAwareSession(boid);
         var requested = SimulationBehaviorSettings.From(Settings) with
         {
-            MaxSpeed = 0.1f
+            MaxSpeed = 0.1f,
+            WanderStrength = 12.5f
         };
 
         // Act
@@ -217,6 +219,7 @@ public sealed class SimulationSessionTests
 
             MaxSpeed = floatRange,
             MaxSteeringForce = floatRange,
+            WanderStrength = floatRange,
             AttractionForce = floatRange,
             RepulsionForce = floatRange,
             InteractionRadius = floatRange,

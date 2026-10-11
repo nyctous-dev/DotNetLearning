@@ -61,6 +61,7 @@ public sealed class SimulationSettingsTests
     [Theory]
     [InlineData("CellSize")]
     [InlineData("MaxNeighborEvaluationsPerBoid")]
+    [InlineData("WanderStrength")]
     public void NewSettings_AreBoundFromAppsettingsAndWithinConfiguredLimits(
         string settingName)
     {

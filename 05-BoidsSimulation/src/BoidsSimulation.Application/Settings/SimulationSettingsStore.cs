@@ -15,6 +15,7 @@ public sealed record SimulationBehaviorSettings(
     float CohesionWeight,
     float MaxSpeed,
     float MaxSteeringForce,
+    float WanderStrength,
     float AttractionForce,
     float RepulsionForce,
     float InteractionRadius)
@@ -33,6 +34,7 @@ public sealed record SimulationBehaviorSettings(
             settings.CohesionWeight,
             settings.MaxSpeed,
             settings.MaxSteeringForce,
+            settings.WanderStrength,
             settings.AttractionForce,
             settings.RepulsionForce,
             settings.InteractionRadius);
@@ -98,6 +100,7 @@ public sealed class SimulationSettingsStore
 
                 MaxSpeed = behavior.MaxSpeed,
                 MaxSteeringForce = behavior.MaxSteeringForce,
+                WanderStrength = behavior.WanderStrength,
 
                 AttractionForce = behavior.AttractionForce,
                 RepulsionForce = behavior.RepulsionForce,

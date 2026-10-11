@@ -1,4 +1,4 @@
-﻿@using Microsoft.AspNetCore.Components.Authorization
+﻿﻿@using Microsoft.AspNetCore.Components.Authorization
 @using BoidsSimulation.Application.Settings
 @using Microsoft.JSInterop
 @using BoidsSimulation.Core.Models
@@ -221,6 +221,11 @@
                                     <label class="admin-slider" for="admin-max-steering-force">
                                         <span><span>Maximum steering force</span><strong>@_settingsEditor.MaxSteeringForce.ToString("0.##")</strong></span>
                                         <input id="admin-max-steering-force" type="range" min="@SimulationLimits.MaxSteeringForce.Min" max="@SimulationLimits.MaxSteeringForce.Max" step="1" @bind="_settingsEditor.MaxSteeringForce" @bind:event="oninput" />
+                                    </label>
+
+                                    <label class="admin-slider" for="admin-wander-strength">
+                                        <span><span>Wander strength</span><strong>@_settingsEditor.WanderStrength.ToString("0.##")</strong></span>
+                                        <input id="admin-wander-strength" type="range" min="@SimulationLimits.WanderStrength.Min" max="@SimulationLimits.WanderStrength.Max" step="0.1" @bind="_settingsEditor.WanderStrength" @bind:event="oninput" />
                                     </label>
 
                                     <label class="admin-slider" for="admin-attraction-force">
@@ -608,6 +613,7 @@
         public float CohesionWeight { get; set; }
         public float MaxSpeed { get; set; }
         public float MaxSteeringForce { get; set; }
+        public float WanderStrength { get; set; }
         public float AttractionForce { get; set; }
         public float RepulsionForce { get; set; }
         public float InteractionRadius { get; set; }
@@ -622,6 +628,7 @@
             CohesionWeight = settings.CohesionWeight;
             MaxSpeed = settings.MaxSpeed;
             MaxSteeringForce = settings.MaxSteeringForce;
+            WanderStrength = settings.WanderStrength;
             AttractionForce = settings.AttractionForce;
             RepulsionForce = settings.RepulsionForce;
             InteractionRadius = settings.InteractionRadius;
@@ -638,6 +645,7 @@
                 CohesionWeight,
                 MaxSpeed,
                 MaxSteeringForce,
+                WanderStrength,
                 AttractionForce,
                 RepulsionForce,
                 InteractionRadius);

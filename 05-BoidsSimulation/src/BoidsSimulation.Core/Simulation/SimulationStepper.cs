@@ -61,9 +61,12 @@ public sealed class SimulationStepper
 {
     private const float Epsilon = 1e-6f;
     private const int ChunksPerProcessor = 4;
+    private const double WanderDirectionChangeIntervalSeconds = 3.0;
+    private const float TwoPi = MathF.PI * 2f;
     private readonly object _settingsSyncRoot = new();
     private readonly SimulationLimits _limits;
     private SimulationSettings _settings;
+    private double _simulationTimeSeconds;
 
     private readonly BoidSpatialGrid _grid;
     private readonly int _parallelChunkCapacity;
@@ -246,6 +249,7 @@ public sealed class SimulationStepper
                     candidateBuffer,
                     ref localWork,
                     out var evaluationsForBoid);
+                steering += CalculateWanderSteering(boid);
                 steering += CalculateInteractionSteering(boid, interactions);
                 _evaluationsPerBoid[i] = evaluationsForBoid;
                 if (steering == Vector2.Zero)
@@ -334,6 +338,7 @@ public sealed class SimulationStepper
         }
         var positionUpdateDuration =
             Stopwatch.GetElapsedTime(phaseStart);
+        _simulationTimeSeconds += timeStep;
         var totalDuration =
             Stopwatch.GetElapsedTime(totalStart);
         LastStepTimings = new SimulationStepTimings(
@@ -470,6 +475,67 @@ public sealed class SimulationStepper
             alignment * _settings.AlignmentWeight +
             cohesion * _settings.CohesionWeight;
     }
+    /// <summary>
+    /// Applies a small, deterministic wander force whose direction changes
+    /// smoothly and independently for each boid. The force is based on the
+    /// boid ID and simulation time, so it requires no mutable per-boid state
+    /// and remains deterministic across equivalent simulation runs.
+    /// </summary>
+    private Vector2 CalculateWanderSteering(Boid boid)
+    {
+        var strength = _settings.WanderStrength;
+        if (strength <= 0f)
+        {
+            return Vector2.Zero;
+        }
+
+        var intervalPosition =
+            _simulationTimeSeconds / WanderDirectionChangeIntervalSeconds;
+        var intervalIndex = (long)Math.Floor(intervalPosition);
+        var intervalProgress = (float)(intervalPosition - intervalIndex);
+
+        // Smoothstep eases the direction change at each interval boundary,
+        // avoiding the abrupt jitter produced by per-frame random values.
+        var smoothProgress =
+            intervalProgress * intervalProgress * (3f - 2f * intervalProgress);
+
+        var startAngle = GetWanderAngle(boid.Id, intervalIndex);
+        var endAngle = GetWanderAngle(boid.Id, intervalIndex + 1);
+        var angleDifference = endAngle - startAngle;
+
+        // Interpolate along the shorter arc between the two random angles.
+        if (angleDifference > MathF.PI)
+        {
+            angleDifference -= TwoPi;
+        }
+        else if (angleDifference < -MathF.PI)
+        {
+            angleDifference += TwoPi;
+        }
+
+        var angle = startAngle + angleDifference * smoothProgress;
+        return new Vector2(MathF.Cos(angle), MathF.Sin(angle)) * strength;
+    }
+
+    private static float GetWanderAngle(int boidId, long intervalIndex)
+    {
+        // A small integer hash gives each boid and interval a reproducible,
+        // distinct angle without allocating Random instances per frame.
+        unchecked
+        {
+            var hash = (uint)boidId;
+            hash ^= (uint)intervalIndex + 0x9E3779B9u + (hash << 6) + (hash >> 2);
+            hash ^= hash >> 16;
+            hash *= 0x7FEB352Du;
+            hash ^= hash >> 15;
+            hash *= 0x846CA68Bu;
+            hash ^= hash >> 16;
+
+            var normalized = (hash & 0x00FFFFFFu) / 16777216f;
+            return normalized * TwoPi;
+        }
+    }
+
     private Vector2 CalculateInteractionSteering(
         Boid boid,
         IReadOnlyList<BoidInteraction> interactions)

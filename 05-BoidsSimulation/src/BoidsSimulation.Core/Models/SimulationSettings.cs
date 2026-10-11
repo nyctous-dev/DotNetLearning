@@ -18,6 +18,7 @@ public sealed record SimulationSettings
     public float SeparationWeight { get; init; } = float.NaN;
     public float AlignmentWeight { get; init; } = float.NaN;
     public float CohesionWeight { get; init; } = float.NaN;
+    public float WanderStrength { get; init; } = float.NaN;
 
     public float MaxSpeed { get; init; } = float.NaN;
     public float MaxSteeringForce { get; init; } = float.NaN;
@@ -79,6 +80,11 @@ public sealed record SimulationSettings
             nameof(CohesionWeight),
             CohesionWeight,
             limits.CohesionWeight);
+        
+        ValidateFloat(
+            nameof(WanderStrength),
+            WanderStrength,
+            limits.WanderStrength);
 
         ValidateFloat(nameof(MaxSpeed), MaxSpeed, limits.MaxSpeed);
 
@@ -174,6 +180,7 @@ public sealed record SimulationLimits
     public FloatRange SeparationWeight { get; init; } = new();
     public FloatRange AlignmentWeight { get; init; } = new();
     public FloatRange CohesionWeight { get; init; } = new();
+    public FloatRange WanderStrength { get; init; } = new();
 
     public FloatRange MaxSpeed { get; init; } = new();
     public FloatRange MaxSteeringForce { get; init; } = new();
@@ -203,6 +210,7 @@ public sealed record SimulationLimits
         ValidateRange(nameof(SeparationWeight), SeparationWeight);
         ValidateRange(nameof(AlignmentWeight), AlignmentWeight);
         ValidateRange(nameof(CohesionWeight), CohesionWeight);
+        ValidateRange(nameof(WanderStrength), WanderStrength);
 
         ValidateRange(nameof(MaxSpeed), MaxSpeed);
         ValidateRange(nameof(MaxSteeringForce), MaxSteeringForce);

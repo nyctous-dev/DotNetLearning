@@ -24,6 +24,7 @@ public sealed class SimulationStepperTests
 
         MaxSpeed = 10f,
         MaxSteeringForce = 5f,
+        WanderStrength = 0f,
         AttractionForce = 5f,
         RepulsionForce = 5f,
         InteractionRadius = 10f,
@@ -102,6 +103,11 @@ public sealed class SimulationStepperTests
             Min = 0f,
             Max = 10_000f
         },
+        WanderStrength = new SimulationLimits.FloatRange
+        {
+            Min = 0f,
+            Max = 10_000f
+        },
         AttractionForce = new SimulationLimits.FloatRange
         {
             Min = 0f,
@@ -163,6 +169,84 @@ public sealed class SimulationStepperTests
         stepper.Step(state);
 
         Assert.Equal(initialVelocity, boid.Velocity);
+    }
+
+    [Fact]
+    public void Step_AppliesWanderWhenBoidHasNoNeighbors()
+    {
+        var settings = DefaultSettings with
+        {
+            WanderStrength = 1f
+        };
+        var boid = CreateBoid(
+            id: 1,
+            position: Vector2.Zero,
+            velocity: Vector2.Zero);
+        var state = CreateState(boid);
+        var stepper = CreateStepper(settings);
+
+        stepper.Step(state);
+
+        Assert.NotEqual(Vector2.Zero, boid.Velocity);
+        Assert.InRange(boid.Velocity.Length(), 0.09999f, 0.10001f);
+    }
+
+    [Fact]
+    public void Step_WanderDirectionIsDifferentForDifferentBoids()
+    {
+        var settings = DefaultSettings with
+        {
+            WanderStrength = 1f
+        };
+        var firstBoid = CreateBoid(
+            id: 1,
+            position: new Vector2(-49f, 0f),
+            velocity: Vector2.Zero);
+        var secondBoid = CreateBoid(
+            id: 2,
+            position: new Vector2(0f, 0f),
+            velocity: Vector2.Zero);
+        var state = CreateState(firstBoid, secondBoid);
+        var stepper = CreateStepper(settings);
+
+        stepper.Step(state);
+
+        Assert.NotEqual(Vector2.Zero, firstBoid.Velocity);
+        Assert.NotEqual(Vector2.Zero, secondBoid.Velocity);
+        Assert.NotEqual(firstBoid.Velocity, secondBoid.Velocity);
+    }
+
+    [Fact]
+    public void Step_WanderDirectionChangesSmoothlyBetweenFrames()
+    {
+        var settings = DefaultSettings with
+        {
+            WanderStrength = 1f
+        };
+        var boid = CreateBoid(
+            id: 7,
+            position: Vector2.Zero,
+            velocity: Vector2.Zero);
+        var state = CreateState(boid);
+        var stepper = CreateStepper(settings);
+
+        stepper.Step(state);
+        var velocityAfterFirstStep = boid.Velocity;
+
+        stepper.Step(state);
+        var velocityAfterSecondStep = boid.Velocity;
+        var firstFrameAcceleration = velocityAfterFirstStep / settings.FixedTimeStep;
+        var secondFrameAcceleration =
+            (velocityAfterSecondStep - velocityAfterFirstStep) /
+            settings.FixedTimeStep;
+
+        var directionSimilarity = Vector2.Dot(
+            Vector2.Normalize(firstFrameAcceleration),
+            Vector2.Normalize(secondFrameAcceleration));
+
+        Assert.True(
+            directionSimilarity > 0.99f,
+            $"Expected smooth wander direction changes, but direction similarity was {directionSimilarity}.");
     }
 
     [Fact]

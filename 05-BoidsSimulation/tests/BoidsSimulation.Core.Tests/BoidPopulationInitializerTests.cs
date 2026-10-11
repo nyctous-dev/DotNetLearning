@@ -24,6 +24,7 @@ public sealed class BoidPopulationInitializerTests
 
         MaxSpeed = 10f,
         MaxSteeringForce = 5f,
+        WanderStrength = 0f,
         AttractionForce = 5f,
         RepulsionForce = 5f,
         InteractionRadius = 10f,
@@ -98,6 +99,11 @@ public sealed class BoidPopulationInitializerTests
             Max = 10_000f
         },
         MaxSteeringForce = new SimulationLimits.FloatRange
+        {
+            Min = 0f,
+            Max = 10_000f
+        },
+        WanderStrength = new SimulationLimits.FloatRange
         {
             Min = 0f,
             Max = 10_000f

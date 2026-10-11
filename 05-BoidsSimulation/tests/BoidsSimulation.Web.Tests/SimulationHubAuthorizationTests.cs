@@ -40,7 +40,7 @@ public sealed class SimulationHubAuthorizationTests
         var attemptedSettings = new SimulationBehaviorSettings(
             25f, 50f, 50f,
             1.5f, 1.5f, 0.8f,
-            250f, 100f, 2000f, 4000f, 300f);
+            250f, 100f, 0f, 2000f, 4000f, 300f);
 
         await Assert.ThrowsAsync<HubException>(
             () => connection.InvokeAsync<SimulationBehaviorSettings>(
