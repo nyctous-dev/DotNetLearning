@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - FLOCK</title>
+
+    <style>
+        :root {
+            color-scheme: dark;
+            font-family: Inter, "Segoe UI", Arial, sans-serif;
+            background: #0a111a;
+            color: #e7eef7;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            min-height: 100vh;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            background:
+                radial-gradient(ellipse at top, #152638 0%, #0a111a 58%);
+            color: #e7eef7;
+        }
+
+        a {
+            color: #72d9ed;
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        .account-header {
+            width: min(1080px, calc(100% - 40px));
+            margin: 0 auto;
+            padding: 24px 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+        }
+
+        .account-brand {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            color: #eef6ff;
+        }
+
+        .account-brand:hover {
+            text-decoration: none;
+        }
+
+        .brand-mark {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+            height: 28px;
+        }
+
+        .brand-mark span {
+            display: block;
+            width: 5px;
+            border-radius: 4px;
+            background: #66d7ec;
+        }
+
+        .brand-mark span:nth-child(1) {
+            height: 13px;
+        }
+
+        .brand-mark span:nth-child(2) {
+            height: 23px;
+        }
+
+        .brand-mark span:nth-child(3) {
+            height: 17px;
+        }
+
+        .brand-copy {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+
+        .brand-name {
+            font-size: 16px;
+            font-weight: 800;
+            letter-spacing: 0.15em;
+        }
+
+        .brand-caption {
+            color: #8295a9;
+            font-size: 9px;
+            font-weight: 600;
+            letter-spacing: 0.14em;
+        }
+
+        .back-link {
+            color: #adbdcc;
+            font-size: 13px;
+        }
+
+        .account-main {
+            width: min(460px, calc(100% - 32px));
+            margin: 5vh auto 32px;
+            padding: 32px;
+            border: 1px solid #293b4d;
+            border-radius: 16px;
+            background: #101b28;
+            box-shadow: 0 24px 80px #00000033;
+        }
+
+        .account-main h1,
+        .account-main h2,
+        .account-main h3 {
+            margin-top: 0;
+            color: #f1f6fc;
+            line-height: 1.3;
+        }
+
+        .account-main h1 {
+            font-size: 25px;
+            margin-bottom: 12px;
+        }
+
+        .account-main p {
+            color: #aab9c8;
+            line-height: 1.6;
+        }
+
+        .account-main hr {
+            border: 0;
+            border-top: 1px solid #293b4d;
+            margin: 22px 0;
+        }
+
+        .account-main form {
+            margin-top: 18px;
+        }
+
+        .form-floating {
+            margin: 18px 0;
+        }
+
+        .form-floating label,
+        .account-main label {
+            display: block;
+            margin-bottom: 8px;
+            color: #b5c3d1;
+            font-size: 13px;
+        }
+
+        .form-control,
+        .account-main input[type="email"],
+        .account-main input[type="password"],
+        .account-main input[type="text"] {
+            display: block;
+            width: 100%;
+            min-height: 44px;
+            padding: 11px 12px;
+            border: 1px solid #34495d;
+            border-radius: 8px;
+            background: #0b141e;
+            color: #f1f6fc;
+            font: inherit;
+        }
+
+        .form-control:focus,
+        .account-main input:focus {
+            outline: 2px solid #3baac1;
+            outline-offset: 1px;
+        }
+
+        .account-main button,
+        .account-main .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 44px;
+            padding: 10px 16px;
+            border: 1px solid #3baac1;
+            border-radius: 8px;
+            background: #3baac1;
+            color: #06131b;
+            font: inherit;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .account-main button[type="submit"],
+        .account-main .btn-primary,
+        .account-main .w-100 {
+            width: 100%;
+        }
+
+        .account-main button:hover,
+        .account-main .btn:hover {
+            filter: brightness(1.08);
+        }
+
+        .account-main ul {
+            padding-left: 22px;
+            color: #b5c3d1;
+            line-height: 1.7;
+        }
+
+        .text-danger,
+        .validation-summary-errors {
+            color: #ff9696;
+            font-size: 13px;
+        }
+
+        .validation-summary-errors ul {
+            color: #ff9696;
+        }
+
+        .account-main input[type="checkbox"] {
+            accent-color: #3baac1;
+        }
+
+        .account-footer {
+            margin-top: auto;
+            padding: 20px;
+            color: #718499;
+            font-size: 11px;
+            text-align: center;
+            letter-spacing: 0.12em;
+        }
+
+        @@media (max-width: 520px) {
+            .account-main {
+                padding: 24px 20px;
+            }
+
+            .account-header {
+                width: calc(100% - 32px);
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="account-header">
+        <a class="account-brand" href="/simulation" aria-label="FLOCK home">
+            <span class="brand-mark" aria-hidden="true">
+                <span></span><span></span><span></span>
+            </span>
+            <span class="brand-copy">
+                <span class="brand-name">FLOCK</span>
+                <span class="brand-caption">SHARED SIMULATION</span>
+            </span>
+        </a>
+
+        <a class="back-link" href="/simulation">Back to simulation</a>
+    </header>
+
+    <main class="account-main">
+        @RenderBody()
+    </main>
+
+    <footer class="account-footer">
+        FLOCK · SHARED SIMULATION
+    </footer>
+
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

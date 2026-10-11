@@ -1,15 +1,11 @@
-
 namespace BoidsSimulation.Web.Services;
 
 public sealed class SimulationConnectionStatus
 {
-    public string Status { get; private set; } = "Disconnected";
+    public string Status { get; private set; } = "Connecting";
 
     public bool IsConnected =>
-        string.Equals(
-            Status,
-            "Connected",
-            StringComparison.Ordinal);
+        string.Equals(Status, "Connected", StringComparison.Ordinal);
 
     public event Action? Changed;
 
@@ -20,6 +16,7 @@ public sealed class SimulationConnectionStatus
         var newStatus = status switch
         {
             "Connected" => "Connected",
+            "Connecting" => "Connecting",
             "Reconnecting" => "Reconnecting",
             _ => "Disconnected"
         };

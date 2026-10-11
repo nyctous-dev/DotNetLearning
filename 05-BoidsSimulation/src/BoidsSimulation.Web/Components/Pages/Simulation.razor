@@ -36,6 +36,8 @@
 
             _dotNetReference = DotNetObjectReference.Create(this);
 
+            ConnectionStatus.Update("Connecting");
+            
             await _module.InvokeVoidAsync(
                 "connect",
                 _dotNetReference,
@@ -53,8 +55,11 @@
     [JSInvokable]
     public Task OnConnectionStatusChanged(string status)
     {
-        ConnectionStatus.Update(status);
-        return Task.CompletedTask;
+        return InvokeAsync(() =>
+        {
+            ConnectionStatus.Update(status);
+            StateHasChanged();
+        });
     }
 
     public async ValueTask DisposeAsync()

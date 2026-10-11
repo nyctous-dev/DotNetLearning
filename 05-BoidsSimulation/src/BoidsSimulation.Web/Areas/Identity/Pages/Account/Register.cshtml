@@ -1,0 +1,52 @@
+@page
+@model BoidsSimulation.Web.Areas.Identity.Pages.Account.RegisterModel
+@{
+    Layout = "/Pages/Shared/_Layout.cshtml";
+    ViewData["Title"] = "Create account";
+}
+
+<h1>Create your account</h1>
+<p>Join FLOCK and get ready to influence the simulation.</p>
+
+<form method="post">
+    <input type="hidden" asp-for="ReturnUrl" />
+
+    <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+
+    <div class="form-floating">
+        <label asp-for="Input.Email">Email address</label>
+        <input asp-for="Input.Email"
+               type="email"
+               autocomplete="email"
+               required />
+        <span asp-validation-for="Input.Email" class="text-danger"></span>
+    </div>
+
+    <div class="form-floating">
+        <label asp-for="Input.Password">Password</label>
+        <input asp-for="Input.Password"
+               type="password"
+               autocomplete="new-password"
+               required />
+        <span asp-validation-for="Input.Password" class="text-danger"></span>
+    </div>
+
+    <div class="form-floating">
+        <label asp-for="Input.ConfirmPassword">Confirm password</label>
+        <input asp-for="Input.ConfirmPassword"
+               type="password"
+               autocomplete="new-password"
+               required />
+        <span asp-validation-for="Input.ConfirmPassword" class="text-danger"></span>
+    </div>
+
+    <button type="submit">Create account</button>
+</form>
+
+<hr />
+
+<p>
+    Already have an account?
+    <a asp-page="./Login" asp-route-returnUrl="@Model.ReturnUrl">Sign in</a>
+</p>
+

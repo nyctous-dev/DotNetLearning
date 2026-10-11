@@ -1,11 +1,10 @@
-﻿
+﻿@using Microsoft.AspNetCore.Components.Authorization
 @inherits LayoutComponentBase
 @implements IDisposable
 @inject BoidsSimulation.Web.Services.SimulationConnectionStatus ConnectionStatus
 
 <div class="app-shell">
     <header class="app-header">
-        
         <a class="brand" href="/simulation" aria-label="FLOCK home">
             <span class="brand-mark" aria-hidden="true">
                 <span></span>
@@ -19,7 +18,7 @@
             </span>
 
             <span
-                class="connection-status @(ConnectionStatus.IsConnected ? "is-connected" : "is-disconnected")"
+                class="connection-status @($"is-{ConnectionStatus.Status.ToLowerInvariant()}")"
                 role="status"
                 aria-label="@($"Simulation connection: {ConnectionStatus.Status}")"
                 title="@ConnectionStatus.Status">
@@ -27,8 +26,8 @@
             </span>
         </a>
 
-
         <div class="header-actions">
+            @* Appearance remains available to guests and signed-in users. *@
             <details class="header-menu" name="header-menu">
                 <summary>
                     <span class="menu-icon" aria-hidden="true">◈</span>
@@ -66,7 +65,10 @@
                             <strong>Motion trails</strong>
                             <small>Show movement history</small>
                         </span>
-                        <input id="show-trails" name="show-trails" type="checkbox" />
+                        <input
+                            id="show-trails"
+                            name="show-trails"
+                            type="checkbox" />
                     </label>
 
                     <p class="panel-note">
@@ -75,56 +77,79 @@
                 </div>
             </details>
 
-            <details class="header-menu" name="header-menu">
-                <summary>
-                    <span class="menu-icon" aria-hidden="true">◎</span>
-                    Interaction
-                    <span class="chevron" aria-hidden="true"></span>
-                </summary>
+            @* The entire interaction dropdown is restricted to signed-in users. *@
+            <AuthorizeView>
+                <Authorized>
+                    <details class="header-menu" name="header-menu">
+                        <summary>
+                            <span class="menu-icon" aria-hidden="true">◎</span>
+                            Interaction
+                            <span class="chevron" aria-hidden="true"></span>
+                        </summary>
 
-                <div class="dropdown-panel interaction-panel">
-                    <div class="panel-heading">
-                        <span class="panel-eyebrow">BOID BEHAVIOR</span>
-                        <h2>Mouse controls</h2>
-                    </div>
+                        <div class="dropdown-panel interaction-panel">
+                            <div class="panel-heading">
+                                <span class="panel-eyebrow">BOID BEHAVIOR</span>
+                                <h2>Mouse controls</h2>
+                            </div>
 
-                    <fieldset class="action-setting">
-                        <legend>Right-click action</legend>
+                            <fieldset class="action-setting">
+                                <legend>Right-click action</legend>
 
-                        <div class="segmented-control">
-                            <input
-                                type="radio"
-                                id="right-click-repel"
-                                name="right-click-action"
-                                value="repel"
-                                checked />
-                            <label for="right-click-repel">Repel</label>
+                                <div class="segmented-control">
+                                    <input
+                                        type="radio"
+                                        id="right-click-repel"
+                                        name="right-click-action"
+                                        value="repel"
+                                        checked />
+                                    <label for="right-click-repel">Repel</label>
 
-                            <input
-                                type="radio"
-                                id="right-click-attract"
-                                name="right-click-action"
-                                value="attract" />
-                            <label for="right-click-attract">Attract</label>
+                                    <input
+                                        type="radio"
+                                        id="right-click-attract"
+                                        name="right-click-action"
+                                        value="attract" />
+                                    <label for="right-click-attract">Attract</label>
+                                </div>
+                            </fieldset>
+
+                            <p class="panel-note">
+                                The selected action will be used when mouse interactions
+                                are connected to the simulation.
+                            </p>
                         </div>
-                    </fieldset>
-
-                    <p class="panel-note">
-                        The selected action will be used when mouse interactions
-                        are connected to the simulation.
-                    </p>
-                </div>
-            </details>
+                    </details>
+                </Authorized>
+            </AuthorizeView>
 
             <span class="header-divider" aria-hidden="true"></span>
 
-            <button
-                class="sign-in-button"
-                type="button"
-                title="Sign-in functionality will be added later">
-                <span class="user-icon" aria-hidden="true">↗</span>
-                Sign in
-            </button>
+            <AuthorizeView>
+                <Authorized>
+                    <a
+                        class="sign-in-button"
+                        href="/Identity/Account/Logout?returnUrl=%2Fsimulation"
+                        title="Sign out">
+                        Sign out
+                    </a>
+                </Authorized>
+
+                <NotAuthorized>
+                    <a
+                        class="sign-in-button"
+                        href="/Identity/Account/Login?returnUrl=%2Fsimulation">
+                        <span class="user-icon" aria-hidden="true">↗</span>
+                        Sign in
+                    </a>
+
+                    <a
+                        class="register-button"
+                        href="/Identity/Account/Register?returnUrl=%2Fsimulation">
+                        Create account
+                    </a>
+                </NotAuthorized>
+            </AuthorizeView>
         </div>
     </header>
 

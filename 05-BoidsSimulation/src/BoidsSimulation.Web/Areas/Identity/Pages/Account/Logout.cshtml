@@ -1,0 +1,15 @@
+@page
+@model BoidsSimulation.Web.Areas.Identity.Pages.Account.LogoutModel
+@{
+    Layout = "/Pages/Shared/_Layout.cshtml";
+    ViewData["Title"] = "Sign out";
+}
+
+<h1>Sign out</h1>
+<p>Are you sure you want to sign out of FLOCK?</p>
+
+<form method="post">
+    <input type="hidden" asp-for="ReturnUrl" />
+    <button type="submit">Sign out</button>
+    <a href="/simulation">Cancel</a>
+</form>

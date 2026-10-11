@@ -116,6 +116,11 @@
     cursor: default;
 }
 
+.connection-status.is-connecting .connection-dot {
+    background: #f5c451;
+    box-shadow: 0 0 8px #f5c45166;
+}
+
 .connection-dot {
     display: block;
     width: 9px;
@@ -366,6 +371,30 @@
 .sign-in-button:hover {
     border-color: #4d88ad;
     background: #20415a;
+}
+
+.register-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 36px;
+    padding: 0 13px;
+    border: 1px solid #2f6f81;
+    border-radius: 9px;
+    background: #112e3b;
+    color: #c9f6ff;
+    font-size: 12px;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: background 160ms ease, border-color 160ms ease;
+}
+
+.register-button:hover {
+    border-color: #54b8cf;
+    background: #173b49;
+    color: #ffffff;
+    text-decoration: none;
 }
 
 .user-icon {

@@ -110,6 +110,8 @@ builder.Services
     })
     .AddEntityFrameworkStores<ApplicationDbContext>();
 
+builder.Services.AddCascadingAuthenticationState();
+
 builder.Services.AddRazorPages();
 
 var app = builder.Build();
@@ -139,6 +141,8 @@ app.MapRazorComponents<App>()
 app.MapHub<SimulationHub>("/hubs/simulation");
 
 app.MapRazorPages();
+
+app.MapGet("/", () => Results.Redirect("/simulation"));
 
 app.Run();
 
