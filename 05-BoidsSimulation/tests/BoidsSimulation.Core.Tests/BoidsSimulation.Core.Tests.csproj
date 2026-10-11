@@ -22,4 +22,14 @@
     <ProjectReference Include="..\..\src\BoidsSimulation.Core\BoidsSimulation.Core.csproj" />
   </ItemGroup>
 
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+
+    <None Include="../../src/BoidsSimulation.Web/appsettings.json"
+          Link="appsettings.json"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+
 </Project>

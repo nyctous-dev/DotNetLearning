@@ -1,6 +1,29 @@
+
+using BoidsSimulation.Core.Models;
 using BoidsSimulation.Web.Components;
 
 var builder = WebApplication.CreateBuilder(args);
+
+
+var simulationLimits = builder.Configuration
+    .GetSection("SimulationLimits")
+    .Get<SimulationLimits>()
+    ?? throw new InvalidOperationException(
+        "Missing SimulationLimits configuration.");
+
+simulationLimits.Validate();
+
+var simulationSettings = builder.Configuration
+    .GetSection("Simulation")
+    .Get<SimulationSettings>()
+    ?? throw new InvalidOperationException(
+        "Missing Simulation configuration.");
+
+simulationSettings.Validate(simulationLimits);
+
+builder.Services.AddSingleton(simulationLimits);
+builder.Services.AddSingleton(simulationSettings);
+
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
