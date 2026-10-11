@@ -8,6 +8,8 @@ public sealed class SimulationState
     private readonly Dictionary<int, Boid> _boidsById;
 
     public int BoidCount => _boidsById.Count;
+    
+    internal IReadOnlyCollection<Boid> Boids => _boidsById.Values;
 
     public SimulationState(IReadOnlyList<Boid> population)
     {
