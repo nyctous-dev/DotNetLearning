@@ -2,6 +2,8 @@
 
 ![Boids Simulation](BoidsSimulation.png)
 
+<video src="BoidsSimulation.mp4" controls width=100%></video>
+
 
 ## Project Overview
 
