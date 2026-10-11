@@ -1,7 +1,25 @@
+using System.Diagnostics;
 using System.Numerics;
 using BoidsSimulation.Core.Models;
 
 namespace BoidsSimulation.Core.Simulation;
+
+public readonly record struct SimulationStepTimings(
+    TimeSpan PopulationPreparation,
+    TimeSpan GridRebuild,
+    TimeSpan SteeringCalculation,
+    TimeSpan VelocityCommit,
+    TimeSpan PositionUpdate,
+    TimeSpan TotalDuration)
+{
+    public static SimulationStepTimings Empty => new(
+        TimeSpan.Zero,
+        TimeSpan.Zero,
+        TimeSpan.Zero,
+        TimeSpan.Zero,
+        TimeSpan.Zero,
+        TimeSpan.Zero);
+}
 
 public sealed class SimulationStepper
 {
@@ -17,6 +35,9 @@ public sealed class SimulationStepper
 
     private Boid[] _populationBuffer = Array.Empty<Boid>();
     private Vector2[] _nextVelocities = Array.Empty<Vector2>();
+
+    public SimulationStepTimings LastStepTimings { get; private set; } =
+        SimulationStepTimings.Empty;
 
     public SimulationStepper(
         SimulationSettings settings,
@@ -52,17 +73,20 @@ public sealed class SimulationStepper
     {
         ArgumentNullException.ThrowIfNull(state);
 
+        var totalStart = Stopwatch.GetTimestamp();
         var populationCount = state.BoidCount;
 
         if (populationCount == 0)
         {
+            LastStepTimings = SimulationStepTimings.Empty;
             return;
         }
 
+        // Phase 1: Prepare the reusable buffers and copy population references.
+        var phaseStart = Stopwatch.GetTimestamp();
+
         EnsureCapacity(populationCount);
 
-        // Copy references into a stable population ordering for this tick.
-        // Boid positions and velocities remain unchanged during steering.
         var populationIndex = 0;
 
         foreach (var boid in state.Boids)
@@ -70,12 +94,20 @@ public sealed class SimulationStepper
             _populationBuffer[populationIndex++] = boid;
         }
 
-        // Rebuild the grid using the same array that the candidate indices
-        // will reference. No population dictionary or index translation
-        // is required when evaluating neighbors.
+        var populationPreparationDuration =
+            Stopwatch.GetElapsedTime(phaseStart);
+
+        // Phase 2: Rebuild the spatial grid for the current population.
+        phaseStart = Stopwatch.GetTimestamp();
+
         _grid.Rebuild(_populationBuffer);
 
-        // Calculate every next velocity before changing any current velocity.
+        var gridRebuildDuration =
+            Stopwatch.GetElapsedTime(phaseStart);
+
+        // Phase 3: Calculate all next velocities before mutating any boid.
+        phaseStart = Stopwatch.GetTimestamp();
+
         for (var i = 0; i < populationCount; i++)
         {
             var boid = _populationBuffer[i];
@@ -100,13 +132,23 @@ public sealed class SimulationStepper
                 _settings.MaxSpeed);
         }
 
-        // Commit velocities after all steering calculations are complete.
+        var steeringCalculationDuration =
+            Stopwatch.GetElapsedTime(phaseStart);
+
+        // Phase 4: Commit velocities after steering calculations finish.
+        phaseStart = Stopwatch.GetTimestamp();
+
         for (var i = 0; i < populationCount; i++)
         {
             _populationBuffer[i].Velocity = _nextVelocities[i];
         }
 
-        // Advance positions only after velocities have been committed.
+        var velocityCommitDuration =
+            Stopwatch.GetElapsedTime(phaseStart);
+
+        // Phase 5: Advance positions and wrap them around the world.
+        phaseStart = Stopwatch.GetTimestamp();
+
         var worldWidth = (float)_settings.WorldWidth;
         var worldHeight = (float)_settings.WorldHeight;
 
@@ -131,6 +173,20 @@ public sealed class SimulationStepper
                     worldHeight,
                     halfHeight));
         }
+
+        var positionUpdateDuration =
+            Stopwatch.GetElapsedTime(phaseStart);
+
+        // Capture the complete measurements for this step.
+        var totalDuration = Stopwatch.GetElapsedTime(totalStart);
+
+        LastStepTimings = new SimulationStepTimings(
+            populationPreparationDuration,
+            gridRebuildDuration,
+            steeringCalculationDuration,
+            velocityCommitDuration,
+            positionUpdateDuration,
+            totalDuration);
     }
 
     private Vector2 CalculateSteering(
@@ -346,9 +402,9 @@ public sealed class SimulationStepper
 
     private void EnsureCapacity(int populationCount)
     {
-        // Keep these buffers exactly sized to the population so the grid
-        // can rebuild directly from the array without an ArraySegment
-        // wrapper. They are reused while the population size stays stable.
+        // Keep buffers exactly sized to the population so the grid can
+        // rebuild directly from the array without an ArraySegment wrapper.
+        // Buffers are reused while the population size remains stable.
         if (_populationBuffer.Length != populationCount)
         {
             Array.Resize(
