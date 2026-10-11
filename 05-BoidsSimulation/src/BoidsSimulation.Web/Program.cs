@@ -1,10 +1,18 @@
 
 using BoidsSimulation.Core.Models;
+using BoidsSimulation.Core.Simulation;
 using BoidsSimulation.Web.Components;
+using BoidsSimulation.Web.Endpoints;
+using Microsoft.Extensions.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Register Blazor services.
+builder.Services
+    .AddRazorComponents()
+    .AddInteractiveServerComponents();
 
+// Load and validate simulation limits.
 var simulationLimits = builder.Configuration
     .GetSection("SimulationLimits")
     .Get<SimulationLimits>()
@@ -13,6 +21,7 @@ var simulationLimits = builder.Configuration
 
 simulationLimits.Validate();
 
+// Load and validate simulation settings.
 var simulationSettings = builder.Configuration
     .GetSection("Simulation")
     .Get<SimulationSettings>()
@@ -21,13 +30,34 @@ var simulationSettings = builder.Configuration
 
 simulationSettings.Validate(simulationLimits);
 
+// Load initialization settings.
+// If the section or Seed value is missing, the seed defaults to null.
+var initializationSettings = builder.Configuration
+    .GetSection("SimulationInitialization")
+    .Get<SimulationInitializationSettings>()
+    ?? new SimulationInitializationSettings();
+
+// Resolve the seed once for this application instance.
+var seedProvider = new SimulationSeedProvider(
+    initializationSettings.Seed);
+
+// Create the initial population once.
+var initializer = new BoidPopulationInitializer(
+    simulationSettings,
+    simulationLimits);
+
+var initialPopulation = initializer.CreateInitialPopulation(
+    seedProvider.Seed);
+
+// Create the shared simulation state.
+var simulationState = new SimulationState(initialPopulation);
+
+// Register the configuration and shared simulation objects.
 builder.Services.AddSingleton(simulationLimits);
 builder.Services.AddSingleton(simulationSettings);
-
-
-// Add services to the container.
-builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents();
+builder.Services.AddSingleton(initializationSettings);
+builder.Services.AddSingleton(seedProvider);
+builder.Services.AddSingleton(simulationState);
 
 var app = builder.Build();
 
@@ -35,16 +65,22 @@ var app = builder.Build();
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
-    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
 }
-app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
-app.UseHttpsRedirection();
 
+app.UseHttpsRedirection();
 app.UseAntiforgery();
 
+// Map API endpoints.
+app.MapSimulationApi();
+
+// Map the Blazor application.
 app.MapStaticAssets();
+
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
 app.Run();
+
+// Makes the application entry point accessible to WebApplicationFactory tests.
+public partial class Program { }
