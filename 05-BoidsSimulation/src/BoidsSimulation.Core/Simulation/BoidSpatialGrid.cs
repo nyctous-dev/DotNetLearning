@@ -1,4 +1,3 @@
-
 using System.Numerics;
 using BoidsSimulation.Core.Models;
 
@@ -9,20 +8,23 @@ public sealed class BoidSpatialGrid
     private readonly int _worldWidth;
     private readonly int _worldHeight;
     private readonly float _cellSize;
-    private readonly int _columns;
-    private readonly int _rows;
+    private readonly float _halfWorldWidth;
+    private readonly float _halfWorldHeight;
+    private readonly int _columnCount;
+    private readonly int _rowCount;
 
-    // Each occupied cell points to the first boid index in a linked chain.
-    // The dictionary is sparse, so a small cell size does not require a
-    // massive array for every possible cell in the world.
+    // Maps each occupied cell to the first population index in that cell.
     private readonly Dictionary<long, int> _cellHeads = new();
 
-    // Reused to validate unique IDs when the population is rebuilt.
+    // Reused when validating IDs during a rebuild.
     private readonly HashSet<int> _seenIds = new();
 
-    // These arrays grow when necessary and are reused by later rebuilds.
+    // The array position is the boid's index in the current population.
     private Boid[] _boids = Array.Empty<Boid>();
+
+    // Singly linked lists connect population indices within each cell.
     private int[] _nextBoidIndices = Array.Empty<int>();
+
     private int _boidCount;
 
     public BoidSpatialGrid(
@@ -31,24 +33,36 @@ public sealed class BoidSpatialGrid
         float cellSize,
         IReadOnlyList<Boid> population)
     {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(worldWidth);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(worldHeight);
+        if (worldWidth <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(worldWidth),
+                "World width must be positive.");
+        }
+
+        if (worldHeight <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(worldHeight),
+                "World height must be positive.");
+        }
 
         if (!float.IsFinite(cellSize) || cellSize <= 0f)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(cellSize),
-                "Cell size must be finite and greater than zero.");
+                "Cell size must be finite and positive.");
         }
-
-        ArgumentNullException.ThrowIfNull(population);
 
         _worldWidth = worldWidth;
         _worldHeight = worldHeight;
         _cellSize = cellSize;
 
-        _columns = CalculateCellCount(worldWidth, cellSize);
-        _rows = CalculateCellCount(worldHeight, cellSize);
+        _halfWorldWidth = worldWidth / 2f;
+        _halfWorldHeight = worldHeight / 2f;
+
+        _columnCount = CalculateCellCount(worldWidth, cellSize);
+        _rowCount = CalculateCellCount(worldHeight, cellSize);
 
         Rebuild(population);
     }
@@ -57,19 +71,19 @@ public sealed class BoidSpatialGrid
     {
         ArgumentNullException.ThrowIfNull(population);
 
-        // Validate the incoming population before changing the current grid.
+        var populationCount = population.Count;
+
+        // Validate the complete input before replacing the current grid.
         _seenIds.Clear();
 
-        for (var i = 0; i < population.Count; i++)
+        for (var i = 0; i < populationCount; i++)
         {
             var boid = population[i];
 
-            ArgumentNullException.ThrowIfNull(boid);
-
-            if (!_seenIds.Add(boid.Id))
+            if (boid is null)
             {
                 throw new ArgumentException(
-                    $"Population contains duplicate boid ID {boid.Id}.",
+                    "Population cannot contain null boids.",
                     nameof(population));
             }
 
@@ -80,183 +94,99 @@ public sealed class BoidSpatialGrid
                     $"Boid {boid.Id} has a non-finite position.",
                     nameof(population));
             }
+
+            if (!_seenIds.Add(boid.Id))
+            {
+                throw new ArgumentException(
+                    $"Population contains duplicate boid ID {boid.Id}.",
+                    nameof(population));
+            }
         }
 
-        EnsureCapacity(population.Count);
+        EnsureCapacity(populationCount);
 
         _cellHeads.Clear();
-        _boidCount = population.Count;
+        _boidCount = populationCount;
 
-        for (var i = 0; i < population.Count; i++)
+        for (var populationIndex = 0;
+             populationIndex < populationCount;
+             populationIndex++)
         {
-            var boid = population[i];
-            var (column, row) = GetCellCoordinates(boid.Position);
+            var boid = population[populationIndex];
+
+            _boids[populationIndex] = boid;
+
+            GetCellCoordinates(
+                boid.Position,
+                out var column,
+                out var row);
+
             var cellKey = GetCellKey(column, row);
 
-            _boids[i] = boid;
-
-            // Insert this boid at the head of its cell's linked chain.
-            if (_cellHeads.TryGetValue(cellKey, out var currentHead))
+            // Insert this population index at the head of its cell's list.
+            if (_cellHeads.TryGetValue(cellKey, out var previousHead))
             {
-                _nextBoidIndices[i] = currentHead;
-                _cellHeads[cellKey] = i;
+                _nextBoidIndices[populationIndex] = previousHead;
             }
             else
             {
-                _nextBoidIndices[i] = -1;
-                _cellHeads.Add(cellKey, i);
+                _nextBoidIndices[populationIndex] = -1;
             }
+
+            _cellHeads[cellKey] = populationIndex;
         }
     }
 
     /// <summary>
-    /// Returns the IDs of boids currently assigned to the specified cell.
-    /// Intended mainly for diagnostics and tests.
-    /// </summary>
-    public IReadOnlyList<int> GetBoidIdsInCell(int column, int row)
-    {
-        if (column < 0 || column >= _columns)
-        {
-            throw new ArgumentOutOfRangeException(nameof(column));
-        }
-
-        if (row < 0 || row >= _rows)
-        {
-            throw new ArgumentOutOfRangeException(nameof(row));
-        }
-
-        var cellKey = GetCellKey(column, row);
-
-        if (!_cellHeads.TryGetValue(cellKey, out var currentIndex))
-        {
-            return Array.Empty<int>();
-        }
-
-        var count = 0;
-
-        for (var index = currentIndex;
-             index != -1;
-             index = _nextBoidIndices[index])
-        {
-            count++;
-        }
-
-        var ids = new int[count];
-        var destinationIndex = 0;
-
-        for (var index = currentIndex;
-             index != -1;
-             index = _nextBoidIndices[index])
-        {
-            ids[destinationIndex++] = _boids[index].Id;
-        }
-
-        return ids;
-    }
-
-    /// <summary>
-    /// Writes neighborhood candidate IDs into a caller-provided buffer.
-    /// Returns the number of IDs written, which never exceeds the buffer
-    /// length. The caller can reuse the same buffer for subsequent queries.
-    ///
-    /// Results are cell-based candidates, not an exact distance-filtered
-    /// neighborhood. The caller must check actual distances.
+    /// Returns boid IDs from cells intersecting the query's search area.
+    /// Results are candidates; callers must check exact distances.
     /// </summary>
     public int QueryNeighborhood(
         Vector2 center,
         float radius,
         Span<int> destination)
     {
-        ValidateQuery(center, radius);
-
-        if (destination.IsEmpty || _boidCount == 0)
-        {
-            return 0;
-        }
-
-        var (centerColumn, centerRow) = GetCellCoordinates(center);
-
-        var radiusInCells = Math.Ceiling((double)radius / _cellSize);
-
-        var visitAllColumns =
-            radiusInCells >= (_columns - 1) / 2d;
-
-        var visitAllRows =
-            radiusInCells >= (_rows - 1) / 2d;
-
-        // If the query covers the whole axis, visit each cell once.
-        // Otherwise, visit the wrapped sequence around the center cell.
-        // This avoids a per-query HashSet just to deduplicate wrapped cells.
-        var columnsToVisit = visitAllColumns
-            ? _columns
-            : (int)(2d * radiusInCells + 1d);
-
-        var rowsToVisit = visitAllRows
-            ? _rows
-            : (int)(2d * radiusInCells + 1d);
-
-        var columnRange = visitAllColumns
-            ? 0L
-            : (long)radiusInCells;
-
-        var rowRange = visitAllRows
-            ? 0L
-            : (long)radiusInCells;
-
-        var count = 0;
-
-        for (var rowStep = 0; rowStep < rowsToVisit; rowStep++)
-        {
-            var row = visitAllRows
-                ? rowStep
-                : WrapCellIndex(
-                    (long)centerRow - rowRange + rowStep,
-                    _rows);
-
-            for (var columnStep = 0;
-                 columnStep < columnsToVisit;
-                 columnStep++)
-            {
-                var column = visitAllColumns
-                    ? columnStep
-                    : WrapCellIndex(
-                        (long)centerColumn - columnRange + columnStep,
-                        _columns);
-
-                var cellKey = GetCellKey(column, row);
-
-                if (!_cellHeads.TryGetValue(cellKey, out var index))
-                {
-                    continue;
-                }
-
-                while (index != -1)
-                {
-                    if (count >= destination.Length)
-                    {
-                        return count;
-                    }
-
-                    destination[count++] = _boids[index].Id;
-                    index = _nextBoidIndices[index];
-                }
-            }
-        }
-
-        return count;
+        return QueryNeighborhoodCore(
+            center,
+            radius,
+            destination,
+            returnPopulationIndices: false);
     }
 
     /// <summary>
-    /// Compatibility overload for callers that want an allocated result.
-    /// Performance-critical code should use the destination-buffer overload.
+    /// Returns population indices from cells intersecting the query's
+    /// search area. An index refers to the population supplied to the
+    /// most recent Rebuild call.
+    ///
+    /// Results are candidates; callers must check exact distances.
+    /// </summary>
+    public int QueryNeighborhoodIndices(
+        Vector2 center,
+        float radius,
+        Span<int> destination)
+    {
+        return QueryNeighborhoodCore(
+            center,
+            radius,
+            destination,
+            returnPopulationIndices: true);
+    }
+
+    /// <summary>
+    /// Compatibility overload that returns a collection of boid IDs.
+    /// This overload allocates its result buffer.
     /// </summary>
     public IReadOnlyList<int> QueryNeighborhood(
         Vector2 center,
         float radius,
         int maxCandidates)
     {
-        ArgumentOutOfRangeException.ThrowIfNegative(maxCandidates);
-        ValidateQuery(center, radius);
+        if (maxCandidates < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(maxCandidates),
+                "Maximum candidates cannot be negative.");
+        }
 
         if (maxCandidates == 0 || _boidCount == 0)
         {
@@ -270,22 +200,137 @@ public sealed class BoidSpatialGrid
             radius,
             buffer.AsSpan());
 
-        if (count == 0)
+        if (count == buffer.Length)
         {
-            return Array.Empty<int>();
+            return buffer;
         }
 
-        if (count < buffer.Length)
-        {
-            Array.Resize(ref buffer, count);
-        }
+        Array.Resize(ref buffer, count);
 
         return buffer;
     }
 
+    /// <summary>
+    /// Returns the boid IDs currently stored in the specified cell.
+    /// Intended for diagnostics and tests, not the simulation hot path.
+    /// </summary>
+    public IReadOnlyList<int> GetBoidIdsInCell(
+        int column,
+        int row)
+    {
+        ValidateCellCoordinates(column, row);
+
+        var cellKey = GetCellKey(column, row);
+
+        if (!_cellHeads.TryGetValue(cellKey, out var populationIndex))
+        {
+            return Array.Empty<int>();
+        }
+
+        var result = new List<int>();
+
+        while (populationIndex != -1)
+        {
+            result.Add(_boids[populationIndex].Id);
+            populationIndex = _nextBoidIndices[populationIndex];
+        }
+
+        return result;
+    }
+
+    private int QueryNeighborhoodCore(
+        Vector2 center,
+        float radius,
+        Span<int> destination,
+        bool returnPopulationIndices)
+    {
+        ValidateQuery(center, radius);
+
+        if (destination.IsEmpty || _boidCount == 0)
+        {
+            return 0;
+        }
+
+        GetCellCoordinates(
+            center,
+            out var centerColumn,
+            out var centerRow);
+
+        var radiusInCells = CalculateSearchCellRadius(radius);
+
+        var visitAllColumns =
+            (2 * radiusInCells) + 1 >= _columnCount;
+
+        var visitAllRows =
+            (2 * radiusInCells) + 1 >= _rowCount;
+
+        var columnVisits = visitAllColumns
+            ? _columnCount
+            : (2 * radiusInCells) + 1;
+
+        var rowVisits = visitAllRows
+            ? _rowCount
+            : (2 * radiusInCells) + 1;
+
+        var resultCount = 0;
+
+        // When every cell on an axis must be visited, walk each cell
+        // exactly once rather than revisiting cells through world wrapping.
+        for (var rowVisit = 0; rowVisit < rowVisits; rowVisit++)
+        {
+            var rowOffset = visitAllRows
+                ? rowVisit
+                : rowVisit - radiusInCells;
+
+            var row = WrapCellIndex(
+                centerRow + rowOffset,
+                _rowCount);
+
+            for (var columnVisit = 0;
+                 columnVisit < columnVisits;
+                 columnVisit++)
+            {
+                var columnOffset = visitAllColumns
+                    ? columnVisit
+                    : columnVisit - radiusInCells;
+
+                var column = WrapCellIndex(
+                    centerColumn + columnOffset,
+                    _columnCount);
+
+                var cellKey = GetCellKey(column, row);
+
+                if (!_cellHeads.TryGetValue(
+                        cellKey,
+                        out var populationIndex))
+                {
+                    continue;
+                }
+
+                while (populationIndex != -1)
+                {
+                    if (resultCount >= destination.Length)
+                    {
+                        return resultCount;
+                    }
+
+                    destination[resultCount++] = returnPopulationIndices
+                        ? populationIndex
+                        : _boids[populationIndex].Id;
+
+                    populationIndex =
+                        _nextBoidIndices[populationIndex];
+                }
+            }
+        }
+
+        return resultCount;
+    }
+
     private void ValidateQuery(Vector2 center, float radius)
     {
-        if (!float.IsFinite(center.X) || !float.IsFinite(center.Y))
+        if (!float.IsFinite(center.X) ||
+            !float.IsFinite(center.Y))
         {
             throw new ArgumentOutOfRangeException(
                 nameof(center),
@@ -296,85 +341,130 @@ public sealed class BoidSpatialGrid
         {
             throw new ArgumentOutOfRangeException(
                 nameof(radius),
-                "Radius must be finite and non-negative.");
+                "Query radius must be finite and non-negative.");
         }
     }
 
-    private void EnsureCapacity(int requiredCapacity)
+    private void ValidateCellCoordinates(int column, int row)
     {
-        if (_boids.Length >= requiredCapacity)
+        if (column < 0 || column >= _columnCount)
         {
-            return;
+            throw new ArgumentOutOfRangeException(
+                nameof(column),
+                $"Column must be between 0 and {_columnCount - 1}.");
         }
 
-        var doubledCapacity = _boids.Length == 0
-            ? 16
-            : (long)_boids.Length * 2;
-
-        var newCapacity = (int)Math.Min(
-            int.MaxValue,
-            Math.Max(requiredCapacity, doubledCapacity));
-
-        Array.Resize(ref _boids, newCapacity);
-        Array.Resize(ref _nextBoidIndices, newCapacity);
+        if (row < 0 || row >= _rowCount)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(row),
+                $"Row must be between 0 and {_rowCount - 1}.");
+        }
     }
 
-    private (int Column, int Row) GetCellCoordinates(Vector2 position)
+    private int CalculateSearchCellRadius(float radius)
     {
-        var wrappedX = WrapCoordinate(position.X, _worldWidth);
-        var wrappedY = WrapCoordinate(position.Y, _worldHeight);
+        // Cap the result because searching farther than the grid's
+        // largest dimension cannot uncover any additional cells.
+        var maximumUsefulRadius = Math.Max(
+            _columnCount,
+            _rowCount);
 
-        var column = (int)Math.Floor(
-            (wrappedX + _worldWidth / 2d) / _cellSize);
+        var requiredRadius = Math.Ceiling(
+            (double)radius / _cellSize);
 
-        var row = (int)Math.Floor(
-            (wrappedY + _worldHeight / 2d) / _cellSize);
+        return (int)Math.Min(
+            requiredRadius,
+            maximumUsefulRadius);
+    }
 
-        // Protect against floating-point rounding near the positive edge.
-        column = Math.Clamp(column, 0, _columns - 1);
-        row = Math.Clamp(row, 0, _rows - 1);
+    private void GetCellCoordinates(
+        Vector2 position,
+        out int column,
+        out int row)
+    {
+        var wrappedX = WrapCoordinate(
+            position.X,
+            _worldWidth,
+            _halfWorldWidth);
 
-        return (column, row);
+        var wrappedY = WrapCoordinate(
+            position.Y,
+            _worldHeight,
+            _halfWorldHeight);
+
+        column = (int)MathF.Floor(
+            (wrappedX + _halfWorldWidth) / _cellSize);
+
+        row = (int)MathF.Floor(
+            (wrappedY + _halfWorldHeight) / _cellSize);
+
+        // The final cell can be narrower when the world dimensions
+        // are not exact multiples of the cell size.
+        column = Math.Clamp(column, 0, _columnCount - 1);
+        row = Math.Clamp(row, 0, _rowCount - 1);
     }
 
     private static int CalculateCellCount(
         int worldDimension,
         float cellSize)
     {
-        var count = Math.Ceiling(worldDimension / (double)cellSize);
-
-        if (count > int.MaxValue)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(cellSize),
-                "Cell size would produce too many grid columns or rows.");
-        }
-
-        return Math.Max(1, (int)count);
-    }
-
-    private long GetCellKey(int column, int row)
-    {
-        return (long)row * _columns + column;
-    }
-
-    private static int WrapCellIndex(long index, int cellCount)
-    {
-        return (int)(((index % cellCount) + cellCount) % cellCount);
+        return Math.Max(
+            1,
+            (int)Math.Ceiling(worldDimension / (double)cellSize));
     }
 
     private static float WrapCoordinate(
         float coordinate,
-        int worldDimension)
+        float worldDimension,
+        float halfWorldDimension)
     {
-        var halfDimension = worldDimension / 2f;
-        var wrapped = (coordinate + halfDimension) % worldDimension;
+        var wrapped = coordinate % worldDimension;
 
-        if (wrapped < 0f)
+        if (wrapped < -halfWorldDimension)
         {
             wrapped += worldDimension;
         }
+        else if (wrapped >= halfWorldDimension)
+        {
+            wrapped -= worldDimension;
+        }
 
-        return wrapped - halfDimension;
+        return wrapped;
+    }
+
+    private static int WrapCellIndex(int index, int cellCount)
+    {
+        var wrapped = index % cellCount;
+
+        return wrapped < 0
+            ? wrapped + cellCount
+            : wrapped;
+    }
+
+    private long GetCellKey(int column, int row)
+    {
+        return ((long)row * _columnCount) + column;
+    }
+
+    private void EnsureCapacity(int requiredCapacity)
+    {
+        if (_boids.Length < requiredCapacity)
+        {
+            var newCapacity = Math.Max(
+                requiredCapacity,
+                Math.Max(4, _boids.Length * 2));
+
+            Array.Resize(ref _boids, newCapacity);
+        }
+
+        if (_nextBoidIndices.Length < requiredCapacity)
+        {
+            var newCapacity = Math.Max(
+                requiredCapacity,
+                Math.Max(4, _nextBoidIndices.Length * 2));
+
+            Array.Resize(ref _nextBoidIndices, newCapacity);
+        }
     }
 }
