@@ -1,10 +1,12 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/BoidsSimulation.Application/BoidsSimulation.Application.csproj" />
     <Project Path="src/BoidsSimulation.Core/BoidsSimulation.Core.csproj" />
     <Project Path="src/BoidsSimulation.Performance/BoidsSimulation.Performance.csproj" />
     <Project Path="src/BoidsSimulation.Web/BoidsSimulation.Web.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/BoidsSimulation.Application.Tests/BoidsSimulation.Application.Tests.csproj" />
     <Project Path="tests/BoidsSimulation.Core.Tests/BoidsSimulation.Core.Tests.csproj" />
     <Project Path="tests/BoidsSimulation.Web.Tests/BoidsSimulation.Web.Tests.csproj" />
   </Folder>
