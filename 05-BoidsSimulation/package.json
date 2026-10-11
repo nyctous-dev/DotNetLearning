@@ -1,0 +1,19 @@
+{
+  "name": "05-boidssimulation",
+  "version": "1.0.0",
+  "description": "## Project Overview",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@microsoft/signalr": "^10.0.11"
+  }
+}

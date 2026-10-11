@@ -68,3 +68,7 @@ nunit-*.xml
 
 # Logs
 *.log
+
+# NodeJS
+node_modules/
+.npm-cache/
