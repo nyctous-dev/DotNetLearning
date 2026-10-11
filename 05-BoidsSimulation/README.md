@@ -2,7 +2,7 @@
 
 ![Boids Simulation](BoidsSimulation.png)
 
-<video src="https://github.com/user-attachments/assets/ce616cc3-e849-46e3-b93f-670e0cd5398e" controls width=100%></video>
+<video src="https://github.com/user-attachments/assets/f24c5f0f-980d-42b2-8acf-8e9853d40f09" controls width=100%></video>
 
 
 ## Project Overview
