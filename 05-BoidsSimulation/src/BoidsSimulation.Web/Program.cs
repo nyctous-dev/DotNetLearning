@@ -7,6 +7,7 @@ using Microsoft.Extensions.Configuration;
 using System.Numerics;
 using BoidsSimulation.Application.Sessions;
 using BoidsSimulation.Web.Services;
+using BoidsSimulation.Web.Hubs;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -93,20 +94,7 @@ builder.Services.AddSingleton<SimulationLoop>();
 // Start the simulation with the ASP.NET Core host.
 builder.Services.AddHostedService<SimulationBackgroundService>();
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+builder.Services.AddSignalR();
 
 var app = builder.Build();
 
@@ -128,6 +116,8 @@ app.MapStaticAssets();
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
+
+app.MapHub<SimulationHub>("/hubs/simulation");
 
 app.Run();
 
