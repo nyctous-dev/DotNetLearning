@@ -2,7 +2,7 @@
 
 ![Boids Simulation](BoidsSimulation.png)
 
-<video src="https://github.com/nyctous-dev/DotNetLearning/blob/main/05-BoidsSimulation/BoidSimulation.mp4" controls width=100%></video>
+<video src="https://github.com/user-attachments/assets/ce616cc3-e849-46e3-b93f-670e0cd5398e" controls width=100%></video>
 
 
 ## Project Overview
