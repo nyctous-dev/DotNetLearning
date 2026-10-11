@@ -21,6 +21,39 @@ public readonly record struct SimulationStepTimings(
         TimeSpan.Zero);
 }
 
+public readonly record struct SimulationStepWorkMetrics(
+    int BoidCount,
+    long GridCandidatesReturned,
+    long NeighborCandidatesExamined,
+    long SquaredDistanceCalculations,
+    long SeparationMatches,
+    long AlignmentMatches,
+    long CohesionMatches,
+    int BoidsWithZeroEvaluatedNeighbors,
+    int BoidsAtEvaluationLimit,
+    int MinimumEvaluationsPerBoid,
+    double AverageEvaluationsPerBoid,
+    int MedianEvaluationsPerBoid,
+    int P95EvaluationsPerBoid,
+    int MaximumEvaluationsPerBoid)
+{
+    public static SimulationStepWorkMetrics Empty => new(
+        0,
+        0L,
+        0L,
+        0L,
+        0L,
+        0L,
+        0L,
+        0,
+        0,
+        0,
+        0.0,
+        0,
+        0,
+        0);
+}
+
 public sealed class SimulationStepper
 {
     private const float Epsilon = 1e-6f;
@@ -35,11 +68,30 @@ public sealed class SimulationStepper
     private readonly float _searchRadius;
     private readonly float _searchRadiusSquared;
 
+    private readonly int[] _evaluationHistogram;
+
     private Boid[] _populationBuffer = Array.Empty<Boid>();
     private Vector2[] _nextVelocities = Array.Empty<Vector2>();
 
+    private struct SteeringWorkAccumulator
+    {
+        public long GridCandidatesReturned;
+        public long NeighborCandidatesExamined;
+        public long SquaredDistanceCalculations;
+
+        public long SeparationMatches;
+        public long AlignmentMatches;
+        public long CohesionMatches;
+
+        public int BoidsWithZeroEvaluatedNeighbors;
+        public int BoidsAtEvaluationLimit;
+    }
+
     public SimulationStepTimings LastStepTimings { get; private set; } =
         SimulationStepTimings.Empty;
+
+    public SimulationStepWorkMetrics LastStepWorkMetrics { get; private set; } =
+        SimulationStepWorkMetrics.Empty;
 
     public SimulationStepper(
         SimulationSettings settings,
@@ -61,17 +113,18 @@ public sealed class SimulationStepper
         _cohesionRadiusSquared =
             settings.CohesionRadius * settings.CohesionRadius;
 
-        // These settings do not change during this stepper's lifetime,
-        // so calculate the broad-phase search radius once.
         _searchRadius = MathF.Max(
             settings.SeparationRadius,
             MathF.Max(
                 settings.AlignmentRadius,
                 settings.CohesionRadius));
-        
+
         _searchRadiusSquared = _searchRadius * _searchRadius;
 
         _candidateBuffer =
+            new int[settings.MaxNeighborEvaluationsPerBoid + 1];
+
+        _evaluationHistogram =
             new int[settings.MaxNeighborEvaluationsPerBoid + 1];
 
         _grid = new BoidSpatialGrid(
@@ -91,6 +144,7 @@ public sealed class SimulationStepper
         if (populationCount == 0)
         {
             LastStepTimings = SimulationStepTimings.Empty;
+            LastStepWorkMetrics = SimulationStepWorkMetrics.Empty;
             return;
         }
 
@@ -98,6 +152,11 @@ public sealed class SimulationStepper
         var phaseStart = Stopwatch.GetTimestamp();
 
         EnsureCapacity(populationCount);
+
+        Array.Clear(
+            _evaluationHistogram,
+            0,
+            _evaluationHistogram.Length);
 
         var populationIndex = 0;
 
@@ -120,10 +179,43 @@ public sealed class SimulationStepper
         // Phase 3: Calculate every next velocity before mutating any boid.
         phaseStart = Stopwatch.GetTimestamp();
 
+        var work = new SteeringWorkAccumulator();
+
+        var minimumEvaluations = int.MaxValue;
+        var maximumEvaluations = 0;
+
         for (var i = 0; i < populationCount; i++)
         {
             var boid = _populationBuffer[i];
-            var steering = CalculateSteering(i, boid);
+
+            var steering = CalculateSteering(
+                i,
+                boid,
+                ref work,
+                out var evaluationsForBoid);
+
+            _evaluationHistogram[evaluationsForBoid]++;
+
+            if (evaluationsForBoid < minimumEvaluations)
+            {
+                minimumEvaluations = evaluationsForBoid;
+            }
+
+            if (evaluationsForBoid > maximumEvaluations)
+            {
+                maximumEvaluations = evaluationsForBoid;
+            }
+
+            if (evaluationsForBoid == 0)
+            {
+                work.BoidsWithZeroEvaluatedNeighbors++;
+            }
+
+            if (evaluationsForBoid >=
+                _settings.MaxNeighborEvaluationsPerBoid)
+            {
+                work.BoidsAtEvaluationLimit++;
+            }
 
             if (steering == Vector2.Zero)
             {
@@ -146,6 +238,12 @@ public sealed class SimulationStepper
 
         var steeringCalculationDuration =
             Stopwatch.GetElapsedTime(phaseStart);
+
+        LastStepWorkMetrics = CreateWorkMetrics(
+            populationCount,
+            work,
+            minimumEvaluations,
+            maximumEvaluations);
 
         // Phase 4: Commit the calculated velocities.
         phaseStart = Stopwatch.GetTimestamp();
@@ -203,8 +301,12 @@ public sealed class SimulationStepper
 
     private Vector2 CalculateSteering(
         int boidIndex,
-        Boid boid)
+        Boid boid,
+        ref SteeringWorkAccumulator work,
+        out int neighborEvaluations)
     {
+        neighborEvaluations = 0;
+
         if (_searchRadius <= 0f)
         {
             return Vector2.Zero;
@@ -215,6 +317,8 @@ public sealed class SimulationStepper
             _searchRadius,
             _candidateBuffer.AsSpan());
 
+        work.GridCandidatesReturned += candidateCount;
+
         var separationSum = Vector2.Zero;
         var separationCount = 0;
 
@@ -224,7 +328,6 @@ public sealed class SimulationStepper
         var cohesionOffsetSum = Vector2.Zero;
         var cohesionCount = 0;
 
-        var neighborEvaluations = 0;
         var maxEvaluations =
             _settings.MaxNeighborEvaluationsPerBoid;
 
@@ -244,6 +347,7 @@ public sealed class SimulationStepper
             }
 
             neighborEvaluations++;
+            work.NeighborCandidatesExamined++;
 
             var neighbor = _populationBuffer[candidateIndex];
 
@@ -251,18 +355,18 @@ public sealed class SimulationStepper
                 boid.Position,
                 neighbor.Position);
 
-            // Reject candidates outside the largest possible influence radius
-            // before calculating squared distance.
+            // Reject candidates outside the largest influence radius.
             if (MathF.Abs(offset.X) > _searchRadius ||
                 MathF.Abs(offset.Y) > _searchRadius)
             {
                 continue;
             }
 
+            work.SquaredDistanceCalculations++;
+
             var distanceSquared = offset.LengthSquared();
 
-            // The candidate is inside the bounding square but outside the
-            // circular search radius, so none of the steering rules can use it.
+            // All steering rules use radii no larger than searchRadius.
             if (distanceSquared > _searchRadiusSquared)
             {
                 continue;
@@ -273,8 +377,11 @@ public sealed class SimulationStepper
                 distanceSquared <= _separationRadiusSquared)
             {
                 // Give closer boids greater influence on separation.
-                separationSum -= offset / distanceSquared;
+                var inverseDistanceSquared = 1f / distanceSquared;
+
+                separationSum -= offset * inverseDistanceSquared;
                 separationCount++;
+                work.SeparationMatches++;
             }
 
             if (_alignmentRadiusSquared > 0f &&
@@ -282,6 +389,7 @@ public sealed class SimulationStepper
             {
                 alignmentVelocitySum += neighbor.Velocity;
                 alignmentCount++;
+                work.AlignmentMatches++;
             }
 
             if (_cohesionRadiusSquared > 0f &&
@@ -289,29 +397,7 @@ public sealed class SimulationStepper
             {
                 cohesionOffsetSum += offset;
                 cohesionCount++;
-            }
-
-            if (_separationRadiusSquared > 0f &&
-                distanceSquared > Epsilon &&
-                distanceSquared <= _separationRadiusSquared)
-            {
-                // Give closer boids greater influence on separation.
-                separationSum -= offset / distanceSquared;
-                separationCount++;
-            }
-
-            if (_alignmentRadiusSquared > 0f &&
-                distanceSquared <= _alignmentRadiusSquared)
-            {
-                alignmentVelocitySum += neighbor.Velocity;
-                alignmentCount++;
-            }
-
-            if (_cohesionRadiusSquared > 0f &&
-                distanceSquared <= _cohesionRadiusSquared)
-            {
-                cohesionOffsetSum += offset;
-                cohesionCount++;
+                work.CohesionMatches++;
             }
         }
 
@@ -336,6 +422,55 @@ public sealed class SimulationStepper
             cohesion * _settings.CohesionWeight;
     }
 
+    private SimulationStepWorkMetrics CreateWorkMetrics(
+        int populationCount,
+        SteeringWorkAccumulator work,
+        int minimumEvaluations,
+        int maximumEvaluations)
+    {
+        return new SimulationStepWorkMetrics(
+            BoidCount: populationCount,
+            GridCandidatesReturned: work.GridCandidatesReturned,
+            NeighborCandidatesExamined: work.NeighborCandidatesExamined,
+            SquaredDistanceCalculations: work.SquaredDistanceCalculations,
+            SeparationMatches: work.SeparationMatches,
+            AlignmentMatches: work.AlignmentMatches,
+            CohesionMatches: work.CohesionMatches,
+            BoidsWithZeroEvaluatedNeighbors:
+                work.BoidsWithZeroEvaluatedNeighbors,
+            BoidsAtEvaluationLimit: work.BoidsAtEvaluationLimit,
+            MinimumEvaluationsPerBoid: minimumEvaluations,
+            AverageEvaluationsPerBoid:
+                (double)work.NeighborCandidatesExamined / populationCount,
+            MedianEvaluationsPerBoid:
+                FindNearestRankPercentile(populationCount, 0.50),
+            P95EvaluationsPerBoid:
+                FindNearestRankPercentile(populationCount, 0.95),
+            MaximumEvaluationsPerBoid: maximumEvaluations);
+    }
+
+    private int FindNearestRankPercentile(
+        int sampleCount,
+        double percentile)
+    {
+        var targetRank = (int)Math.Ceiling(sampleCount * percentile);
+        var cumulativeCount = 0;
+
+        for (var evaluations = 0;
+             evaluations < _evaluationHistogram.Length;
+             evaluations++)
+        {
+            cumulativeCount += _evaluationHistogram[evaluations];
+
+            if (cumulativeCount >= targetRank)
+            {
+                return evaluations;
+            }
+        }
+
+        return _evaluationHistogram.Length - 1;
+    }
+
     private Vector2 CalculateSeparationSteering(
         Boid boid,
         Vector2 separationSum,
@@ -346,9 +481,6 @@ public sealed class SimulationStepper
             return Vector2.Zero;
         }
 
-        // The old code tested (separationSum / neighborCount).LengthSquared()
-        // against Epsilon. Apply the equivalent threshold to the sum to
-        // avoid dividing both vector components by the neighbor count.
         var count = (float)neighborCount;
 
         if (separationSum.LengthSquared() <=
@@ -357,8 +489,6 @@ public sealed class SimulationStepper
             return Vector2.Zero;
         }
 
-        // Dividing by a positive count changes magnitude, not direction.
-        // Normalize the sum directly to avoid an intermediate vector divide.
         var desiredVelocity =
             Vector2.Normalize(separationSum) *
             _settings.MaxSpeed;
@@ -378,7 +508,6 @@ public sealed class SimulationStepper
 
         var count = (float)neighborCount;
 
-        // Preserve the previous near-zero test on the average velocity.
         if (alignmentVelocitySum.LengthSquared() <=
             Epsilon * count * count)
         {
@@ -404,7 +533,6 @@ public sealed class SimulationStepper
 
         var count = (float)neighborCount;
 
-        // Preserve the previous near-zero test on the average offset.
         if (cohesionOffsetSum.LengthSquared() <=
             Epsilon * count * count)
         {
@@ -450,9 +578,6 @@ public sealed class SimulationStepper
 
     private void EnsureCapacity(int populationCount)
     {
-        // Keep the buffers exactly sized to the population, so the grid
-        // can rebuild from the same array without an ArraySegment wrapper.
-        // Buffers are reused while the population size remains stable.
         if (_populationBuffer.Length != populationCount)
         {
             Array.Resize(
