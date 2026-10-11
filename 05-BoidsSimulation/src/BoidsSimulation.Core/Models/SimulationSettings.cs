@@ -1,56 +1,45 @@
-
 namespace BoidsSimulation.Core.Models;
 
+/// <summary>
+/// Configurable values that control the simulation's world and behavior.
+/// </summary>
 public sealed record SimulationSettings
 {
-    // Missing configuration values retain invalid sentinel values.
-    // Valid defaults must come from appsettings.json.
-
-    // World configuration
     public int WorldWidth { get; init; } = int.MinValue;
     public int WorldHeight { get; init; } = int.MinValue;
-
-    // Population configuration
     public int MaxBoids { get; init; } = int.MinValue;
     public int InitialBoidCount { get; init; } = int.MinValue;
 
-    // Flocking behavior
     public float SeparationRadius { get; init; } = float.NaN;
     public float AlignmentRadius { get; init; } = float.NaN;
     public float CohesionRadius { get; init; } = float.NaN;
+    public float CellSize { get; init; } = float.NaN;
 
     public float SeparationWeight { get; init; } = float.NaN;
     public float AlignmentWeight { get; init; } = float.NaN;
     public float CohesionWeight { get; init; } = float.NaN;
 
-    // Movement constraints
     public float MaxSpeed { get; init; } = float.NaN;
     public float MaxSteeringForce { get; init; } = float.NaN;
-
-    // User interaction forces
     public float AttractionForce { get; init; } = float.NaN;
     public float RepulsionForce { get; init; } = float.NaN;
     public float InteractionRadius { get; init; } = float.NaN;
-
-    // Simulation timing
     public float FixedTimeStep { get; init; } = float.NaN;
 
+    public int MaxNeighborEvaluationsPerBoid { get; init; } = int.MinValue;
+
+    /// <summary>
+    /// Validates all configured simulation values against the configured limits.
+    /// </summary>
     public void Validate(SimulationLimits limits)
     {
         ArgumentNullException.ThrowIfNull(limits);
 
-        // Reject incomplete or invalid limit configuration first.
         limits.Validate();
 
-        ValidateInteger(
-            nameof(WorldWidth), WorldWidth, limits.WorldWidth);
-
-        ValidateInteger(
-            nameof(WorldHeight), WorldHeight, limits.WorldHeight);
-
-        ValidateInteger(
-            nameof(MaxBoids), MaxBoids, limits.MaxBoids);
-
+        ValidateInteger(nameof(WorldWidth), WorldWidth, limits.WorldWidth);
+        ValidateInteger(nameof(WorldHeight), WorldHeight, limits.WorldHeight);
+        ValidateInteger(nameof(MaxBoids), MaxBoids, limits.MaxBoids);
         ValidateInteger(
             nameof(InitialBoidCount),
             InitialBoidCount,
@@ -72,6 +61,11 @@ public sealed record SimulationSettings
             limits.CohesionRadius);
 
         ValidateFloat(
+            nameof(CellSize),
+            CellSize,
+            limits.CellSize);
+
+        ValidateFloat(
             nameof(SeparationWeight),
             SeparationWeight,
             limits.SeparationWeight);
@@ -86,8 +80,7 @@ public sealed record SimulationSettings
             CohesionWeight,
             limits.CohesionWeight);
 
-        ValidateFloat(
-            nameof(MaxSpeed), MaxSpeed, limits.MaxSpeed);
+        ValidateFloat(nameof(MaxSpeed), MaxSpeed, limits.MaxSpeed);
 
         ValidateFloat(
             nameof(MaxSteeringForce),
@@ -114,21 +107,18 @@ public sealed record SimulationSettings
             FixedTimeStep,
             limits.FixedTimeStep);
 
-        // The startup population can never exceed the configured ceiling.
+        ValidateInteger(
+            nameof(MaxNeighborEvaluationsPerBoid),
+            MaxNeighborEvaluationsPerBoid,
+            limits.MaxNeighborEvaluationsPerBoid);
+
         if (InitialBoidCount > MaxBoids)
         {
-            var (minimum, maximum) =
-                limits.InitialBoidCount.GetBounds(
-                    nameof(InitialBoidCount));
-
-            var effectiveMaximum = Math.Min(maximum, MaxBoids);
-
             throw new ArgumentOutOfRangeException(
-                nameof(InitialBoidCount),
-                InitialBoidCount,
-                $"{nameof(InitialBoidCount)} must be between " +
-                $"{minimum} and {effectiveMaximum}, because it cannot " +
-                $"exceed the configured MaxBoids value of {MaxBoids}.");
+                nameof(MaxBoids),
+                MaxBoids,
+                $"MaxBoids ({MaxBoids}) cannot be less than " +
+                $"InitialBoidCount ({InitialBoidCount}).");
         }
     }
 
@@ -144,8 +134,7 @@ public sealed record SimulationSettings
             throw new ArgumentOutOfRangeException(
                 settingName,
                 value,
-                $"{settingName} must be between {minimum} and {maximum} " +
-                $"according to SimulationLimits:{settingName}.");
+                $"{settingName} must be between {minimum} and {maximum}, inclusive.");
         }
     }
 
@@ -156,92 +145,100 @@ public sealed record SimulationSettings
     {
         var (minimum, maximum) = range.GetBounds(settingName);
 
-        if (!float.IsFinite(value) ||
-            value < minimum ||
-            value > maximum)
+        if (!float.IsFinite(value) || value < minimum || value > maximum)
         {
             throw new ArgumentOutOfRangeException(
                 settingName,
                 value,
-                $"{settingName} must be finite and between " +
-                $"{minimum} and {maximum} according to " +
-                $"SimulationLimits:{settingName}.");
+                $"{settingName} must be a finite value between " +
+                $"{minimum} and {maximum}, inclusive.");
         }
     }
 }
 
+/// <summary>
+/// Configured validation boundaries for the simulation settings.
+/// </summary>
 public sealed record SimulationLimits
 {
-    public IntegerRange WorldWidth { get; init; } = null!;
-    public IntegerRange WorldHeight { get; init; } = null!;
+    public IntegerRange WorldWidth { get; init; } = new();
+    public IntegerRange WorldHeight { get; init; } = new();
+    public IntegerRange MaxBoids { get; init; } = new();
+    public IntegerRange InitialBoidCount { get; init; } = new();
 
-    public IntegerRange MaxBoids { get; init; } = null!;
-    public IntegerRange InitialBoidCount { get; init; } = null!;
+    public FloatRange SeparationRadius { get; init; } = new();
+    public FloatRange AlignmentRadius { get; init; } = new();
+    public FloatRange CohesionRadius { get; init; } = new();
+    public FloatRange CellSize { get; init; } = new();
 
-    public FloatRange SeparationRadius { get; init; } = null!;
-    public FloatRange AlignmentRadius { get; init; } = null!;
-    public FloatRange CohesionRadius { get; init; } = null!;
+    public FloatRange SeparationWeight { get; init; } = new();
+    public FloatRange AlignmentWeight { get; init; } = new();
+    public FloatRange CohesionWeight { get; init; } = new();
 
-    public FloatRange SeparationWeight { get; init; } = null!;
-    public FloatRange AlignmentWeight { get; init; } = null!;
-    public FloatRange CohesionWeight { get; init; } = null!;
+    public FloatRange MaxSpeed { get; init; } = new();
+    public FloatRange MaxSteeringForce { get; init; } = new();
+    public FloatRange AttractionForce { get; init; } = new();
+    public FloatRange RepulsionForce { get; init; } = new();
+    public FloatRange InteractionRadius { get; init; } = new();
+    public FloatRange FixedTimeStep { get; init; } = new();
 
-    public FloatRange MaxSpeed { get; init; } = null!;
-    public FloatRange MaxSteeringForce { get; init; } = null!;
+    public IntegerRange MaxNeighborEvaluationsPerBoid { get; init; } = new();
 
-    public FloatRange AttractionForce { get; init; } = null!;
-    public FloatRange RepulsionForce { get; init; } = null!;
-    public FloatRange InteractionRadius { get; init; } = null!;
-
-    public FloatRange FixedTimeStep { get; init; } = null!;
-
+    /// <summary>
+    /// Ensures every configured range has bounds and that each minimum is no
+    /// greater than its maximum.
+    /// </summary>
     public void Validate()
     {
-        ValidateRange(WorldWidth, nameof(WorldWidth));
-        ValidateRange(WorldHeight, nameof(WorldHeight));
+        ValidateRange(nameof(WorldWidth), WorldWidth);
+        ValidateRange(nameof(WorldHeight), WorldHeight);
+        ValidateRange(nameof(MaxBoids), MaxBoids);
+        ValidateRange(nameof(InitialBoidCount), InitialBoidCount);
 
-        ValidateRange(MaxBoids, nameof(MaxBoids));
-        ValidateRange(InitialBoidCount, nameof(InitialBoidCount));
+        ValidateRange(nameof(SeparationRadius), SeparationRadius);
+        ValidateRange(nameof(AlignmentRadius), AlignmentRadius);
+        ValidateRange(nameof(CohesionRadius), CohesionRadius);
+        ValidateRange(nameof(CellSize), CellSize);
 
-        ValidateRange(SeparationRadius, nameof(SeparationRadius));
-        ValidateRange(AlignmentRadius, nameof(AlignmentRadius));
-        ValidateRange(CohesionRadius, nameof(CohesionRadius));
+        ValidateRange(nameof(SeparationWeight), SeparationWeight);
+        ValidateRange(nameof(AlignmentWeight), AlignmentWeight);
+        ValidateRange(nameof(CohesionWeight), CohesionWeight);
 
-        ValidateRange(SeparationWeight, nameof(SeparationWeight));
-        ValidateRange(AlignmentWeight, nameof(AlignmentWeight));
-        ValidateRange(CohesionWeight, nameof(CohesionWeight));
+        ValidateRange(nameof(MaxSpeed), MaxSpeed);
+        ValidateRange(nameof(MaxSteeringForce), MaxSteeringForce);
+        ValidateRange(nameof(AttractionForce), AttractionForce);
+        ValidateRange(nameof(RepulsionForce), RepulsionForce);
+        ValidateRange(nameof(InteractionRadius), InteractionRadius);
+        ValidateRange(nameof(FixedTimeStep), FixedTimeStep);
 
-        ValidateRange(MaxSpeed, nameof(MaxSpeed));
-        ValidateRange(MaxSteeringForce, nameof(MaxSteeringForce));
-
-        ValidateRange(AttractionForce, nameof(AttractionForce));
-        ValidateRange(RepulsionForce, nameof(RepulsionForce));
-        ValidateRange(InteractionRadius, nameof(InteractionRadius));
-
-        ValidateRange(FixedTimeStep, nameof(FixedTimeStep));
+        ValidateRange(
+            nameof(MaxNeighborEvaluationsPerBoid),
+            MaxNeighborEvaluationsPerBoid);
     }
 
     private static void ValidateRange(
-        IntegerRange? range,
-        string settingName)
+        string settingName,
+        IntegerRange? range)
     {
         if (range is null)
         {
             throw new ArgumentException(
-                $"Missing SimulationLimits:{settingName} configuration.");
+                $"Missing limits for {settingName}.",
+                settingName);
         }
 
         _ = range.GetBounds(settingName);
     }
 
     private static void ValidateRange(
-        FloatRange? range,
-        string settingName)
+        string settingName,
+        FloatRange? range)
     {
         if (range is null)
         {
             throw new ArgumentException(
-                $"Missing SimulationLimits:{settingName} configuration.");
+                $"Missing limits for {settingName}.",
+                settingName);
         }
 
         _ = range.GetBounds(settingName);
@@ -254,19 +251,21 @@ public sealed record SimulationLimits
 
         public (int Min, int Max) GetBounds(string settingName)
         {
-            if (Min is not int minimum || Max is not int maximum)
+            if (Min is null || Max is null)
             {
                 throw new ArgumentException(
-                    $"SimulationLimits:{settingName} must define both Min and Max.");
+                    $"Both Min and Max must be configured for {settingName}.",
+                    settingName);
             }
 
-            if (minimum > maximum)
+            if (Min.Value > Max.Value)
             {
                 throw new ArgumentException(
-                    $"SimulationLimits:{settingName} has a minimum greater than its maximum.");
+                    $"The minimum limit for {settingName} cannot exceed its maximum.",
+                    settingName);
             }
 
-            return (minimum, maximum);
+            return (Min.Value, Max.Value);
         }
     }
 
@@ -277,22 +276,28 @@ public sealed record SimulationLimits
 
         public (float Min, float Max) GetBounds(string settingName)
         {
-            if (Min is not float minimum ||
-                Max is not float maximum ||
-                !float.IsFinite(minimum) ||
-                !float.IsFinite(maximum))
+            if (Min is null || Max is null)
             {
                 throw new ArgumentException(
-                    $"SimulationLimits:{settingName} must define finite Min and Max values.");
+                    $"Both Min and Max must be configured for {settingName}.",
+                    settingName);
             }
 
-            if (minimum > maximum)
+            if (!float.IsFinite(Min.Value) || !float.IsFinite(Max.Value))
             {
                 throw new ArgumentException(
-                    $"SimulationLimits:{settingName} has a minimum greater than its maximum.");
+                    $"Limits for {settingName} must be finite values.",
+                    settingName);
             }
 
-            return (minimum, maximum);
+            if (Min.Value > Max.Value)
+            {
+                throw new ArgumentException(
+                    $"The minimum limit for {settingName} cannot exceed its maximum.",
+                    settingName);
+            }
+
+            return (Min.Value, Max.Value);
         }
     }
 }
