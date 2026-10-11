@@ -11,12 +11,12 @@ using Microsoft.Extensions.Options;
 namespace BoidsSimulation.Web.Tests;
 
 public sealed class SimulationHubSerializationTests
-    : IClassFixture<WebApplicationFactory<Program>>
+    : IClassFixture<BoidsSimulationWebApplicationFactory>
 {
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly BoidsSimulationWebApplicationFactory _factory;
 
     public SimulationHubSerializationTests(
-        WebApplicationFactory<Program> factory)
+        BoidsSimulationWebApplicationFactory factory)
     {
         _factory = factory;
     }

@@ -8,12 +8,12 @@ using Microsoft.Extensions.DependencyInjection;
 namespace BoidsSimulation.Web.Tests;
 
 public sealed class SimulationHubTests
-    : IClassFixture<WebApplicationFactory<Program>>
+    : IClassFixture<BoidsSimulationWebApplicationFactory>
 {
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly BoidsSimulationWebApplicationFactory _factory;
 
     public SimulationHubTests(
-        WebApplicationFactory<Program> factory)
+        BoidsSimulationWebApplicationFactory factory)
     {
         _factory = factory;
     }

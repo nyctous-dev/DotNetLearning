@@ -108,6 +108,7 @@ builder.Services
         options.Lockout.DefaultLockoutTimeSpan =
             TimeSpan.FromMinutes(15);
     })
+    .AddRoles<IdentityRole>()
     .AddEntityFrameworkStores<ApplicationDbContext>();
 
 builder.Services.AddCascadingAuthenticationState();
@@ -116,8 +117,24 @@ builder.Services.AddRazorPages();
 
 builder.Services.AddScoped<SimulationPreferencesService>();
 builder.Services.AddScoped<SimulationVisualPreferencesState>();
+builder.Services.AddScoped<AdminAccountSeeder>();
 
 var app = builder.Build();
+
+// Apply pending database migrations before accessing Identity tables.
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider
+        .GetRequiredService<ApplicationDbContext>();
+
+    await dbContext.Database.MigrateAsync();
+
+    // Ensure the Admin role exists and optionally bootstrap an admin account.
+    var adminSeeder = scope.ServiceProvider
+        .GetRequiredService<AdminAccountSeeder>();
+
+    await adminSeeder.SeedAsync();
+}
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())

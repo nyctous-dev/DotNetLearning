@@ -7,12 +7,12 @@ using Microsoft.Extensions.DependencyInjection;
 namespace BoidsSimulation.Web.Tests;
 
 public sealed class HostedSimulationIntegrationTests
-    : IClassFixture<WebApplicationFactory<Program>>
+    : IClassFixture<BoidsSimulationWebApplicationFactory>
 {
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly BoidsSimulationWebApplicationFactory _factory;
 
     public HostedSimulationIntegrationTests(
-        WebApplicationFactory<Program> factory)
+        BoidsSimulationWebApplicationFactory factory)
     {
         _factory = factory;
     }

@@ -9,13 +9,13 @@ using Xunit;
 namespace BoidsSimulation.Web.Tests;
 
 public sealed class SimulationApiTests
-    : IClassFixture<WebApplicationFactory<Program>>
+    : IClassFixture<BoidsSimulationWebApplicationFactory>
 {
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly BoidsSimulationWebApplicationFactory _factory;
     private readonly HttpClient _client;
 
     public SimulationApiTests(
-        WebApplicationFactory<Program> factory)
+        BoidsSimulationWebApplicationFactory factory)
     {
         _factory = factory;
         _client = factory.CreateClient();

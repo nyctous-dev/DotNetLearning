@@ -6,12 +6,12 @@ using Microsoft.AspNetCore.Mvc.Testing;
 namespace BoidsSimulation.Web.Tests;
 
 public sealed class SimulationHubEndpointTests
-    : IClassFixture<WebApplicationFactory<Program>>
+    : IClassFixture<BoidsSimulationWebApplicationFactory>
 {
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly BoidsSimulationWebApplicationFactory _factory;
 
     public SimulationHubEndpointTests(
-        WebApplicationFactory<Program> factory)
+        BoidsSimulationWebApplicationFactory factory)
     {
         _factory = factory;
     }
