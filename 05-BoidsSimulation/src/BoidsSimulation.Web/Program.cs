@@ -4,7 +4,6 @@ using BoidsSimulation.Core.Simulation;
 using BoidsSimulation.Web.Components;
 using BoidsSimulation.Web.Endpoints;
 using Microsoft.Extensions.Configuration;
-using System.Numerics;
 using BoidsSimulation.Application.Sessions;
 using BoidsSimulation.Web.Services;
 using BoidsSimulation.Web.Hubs;
@@ -35,7 +34,6 @@ var simulationSettings = builder.Configuration
 simulationSettings.Validate(simulationLimits);
 
 // Load initialization settings.
-// If the section or Seed value is missing, the seed defaults to null.
 var initializationSettings = builder.Configuration
     .GetSection("SimulationInitialization")
     .Get<SimulationInitializationSettings>()
@@ -53,38 +51,15 @@ var initializer = new BoidPopulationInitializer(
 var initialPopulation = initializer.CreateInitialPopulation(
     seedProvider.Seed);
 
-// Create the shared simulation state.
+// Create the shared simulation state once.
 var simulationState = new SimulationState(initialPopulation);
 
-// Register the configuration and shared simulation objects.
+// Register configuration and the shared simulation objects.
 builder.Services.AddSingleton(simulationLimits);
 builder.Services.AddSingleton(simulationSettings);
 builder.Services.AddSingleton(initializationSettings);
 builder.Services.AddSingleton(seedProvider);
 builder.Services.AddSingleton(simulationState);
-
-// Create the initial population and authoritative simulation state.
-builder.Services.AddSingleton<SimulationState>(_ =>
-{
-    var random = Random.Shared;
-    var boids = new Boid[simulationSettings.InitialBoidCount];
-
-    for (var i = 0; i < boids.Length; i++)
-    {
-        var position = new Vector2(
-            random.NextSingle() * simulationSettings.WorldWidth,
-            random.NextSingle() * simulationSettings.WorldHeight);
-
-        var angle = random.NextSingle() * MathF.Tau;
-        var velocity = new Vector2(
-            MathF.Cos(angle),
-            MathF.Sin(angle)) * simulationSettings.MaxSpeed;
-
-        boids[i] = new Boid(i + 1, position, velocity);
-    }
-
-    return new SimulationState(boids);
-});
 
 // Register the simulation pipeline.
 builder.Services.AddSingleton<SimulationStepper>();
@@ -93,7 +68,10 @@ builder.Services.AddSingleton<SimulationLoop>();
 
 // Start the simulation with the ASP.NET Core host.
 builder.Services.AddHostedService<SimulationBackgroundService>();
+builder.Services.AddHostedService<SimulationSnapshotBroadcaster>();
+builder.Services.AddSingleton<SimulationConnectionStatus>();
 
+// Configure SignalR JSON serialization for System.Numerics.Vector2.
 builder.Services
     .AddSignalR()
     .AddJsonProtocol(options =>

@@ -1,23 +1,151 @@
-﻿@inherits LayoutComponentBase
+﻿
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject BoidsSimulation.Web.Services.SimulationConnectionStatus ConnectionStatus
 
-<div class="page">
-    <div class="sidebar">
-        <NavMenu />
-    </div>
+<div class="app-shell">
+    <header class="app-header">
+        
+        <a class="brand" href="/simulation" aria-label="FLOCK home">
+            <span class="brand-mark" aria-hidden="true">
+                <span></span>
+                <span></span>
+                <span></span>
+            </span>
 
-    <main>
-        <div class="top-row px-4">
-            <a href="https://learn.microsoft.com/aspnet/core/" target="_blank">About</a>
+            <span class="brand-copy">
+                <span class="brand-name">FLOCK</span>
+                <span class="brand-caption">SHARED SIMULATION</span>
+            </span>
+
+            <span
+                class="connection-status @(ConnectionStatus.IsConnected ? "is-connected" : "is-disconnected")"
+                role="status"
+                aria-label="@($"Simulation connection: {ConnectionStatus.Status}")"
+                title="@ConnectionStatus.Status">
+                <span class="connection-dot"></span>
+            </span>
+        </a>
+
+
+        <div class="header-actions">
+            <details class="header-menu" name="header-menu">
+                <summary>
+                    <span class="menu-icon" aria-hidden="true">◈</span>
+                    Appearance
+                    <span class="chevron" aria-hidden="true"></span>
+                </summary>
+
+                <div class="dropdown-panel appearance-panel">
+                    <div class="panel-heading">
+                        <span class="panel-eyebrow">PERSONALIZE</span>
+                        <h2>Visual settings</h2>
+                    </div>
+
+                    <label class="setting-field" for="boid-color">
+                        <span>Boid color</span>
+                        <select id="boid-color" name="boid-color">
+                            <option value="cyan">Electric cyan</option>
+                            <option value="white">White</option>
+                            <option value="amber">Amber</option>
+                            <option value="green">Mint green</option>
+                        </select>
+                    </label>
+
+                    <label class="setting-field" for="boid-size">
+                        <span>Boid size</span>
+                        <select id="boid-size" name="boid-size">
+                            <option value="small">Small</option>
+                            <option value="medium" selected>Medium</option>
+                            <option value="large">Large</option>
+                        </select>
+                    </label>
+
+                    <label class="check-setting" for="show-trails">
+                        <span>
+                            <strong>Motion trails</strong>
+                            <small>Show movement history</small>
+                        </span>
+                        <input id="show-trails" name="show-trails" type="checkbox" />
+                    </label>
+
+                    <p class="panel-note">
+                        Visual settings will be connected to the renderer next.
+                    </p>
+                </div>
+            </details>
+
+            <details class="header-menu" name="header-menu">
+                <summary>
+                    <span class="menu-icon" aria-hidden="true">◎</span>
+                    Interaction
+                    <span class="chevron" aria-hidden="true"></span>
+                </summary>
+
+                <div class="dropdown-panel interaction-panel">
+                    <div class="panel-heading">
+                        <span class="panel-eyebrow">BOID BEHAVIOR</span>
+                        <h2>Mouse controls</h2>
+                    </div>
+
+                    <fieldset class="action-setting">
+                        <legend>Right-click action</legend>
+
+                        <div class="segmented-control">
+                            <input
+                                type="radio"
+                                id="right-click-repel"
+                                name="right-click-action"
+                                value="repel"
+                                checked />
+                            <label for="right-click-repel">Repel</label>
+
+                            <input
+                                type="radio"
+                                id="right-click-attract"
+                                name="right-click-action"
+                                value="attract" />
+                            <label for="right-click-attract">Attract</label>
+                        </div>
+                    </fieldset>
+
+                    <p class="panel-note">
+                        The selected action will be used when mouse interactions
+                        are connected to the simulation.
+                    </p>
+                </div>
+            </details>
+
+            <span class="header-divider" aria-hidden="true"></span>
+
+            <button
+                class="sign-in-button"
+                type="button"
+                title="Sign-in functionality will be added later">
+                <span class="user-icon" aria-hidden="true">↗</span>
+                Sign in
+            </button>
         </div>
+    </header>
 
-        <article class="content px-4">
-            @Body
-        </article>
+    <main class="app-main">
+        @Body
     </main>
 </div>
 
-<div id="blazor-error-ui" data-nosnippet>
-    An unhandled error has occurred.
-    <a href="." class="reload">Reload</a>
-    <span class="dismiss">🗙</span>
-</div>
+@code {
+    protected override void OnInitialized()
+    {
+        ConnectionStatus.Changed += HandleConnectionStatusChanged;
+    }
+
+    private void HandleConnectionStatusChanged()
+    {
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        ConnectionStatus.Changed -= HandleConnectionStatusChanged;
+    }
+}

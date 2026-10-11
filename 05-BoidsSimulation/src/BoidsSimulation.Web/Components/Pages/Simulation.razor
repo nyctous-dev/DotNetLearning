@@ -1,59 +1,25 @@
 
+@using BoidsSimulation.Core.Models
 @page "/simulation"
 @rendermode Microsoft.AspNetCore.Components.Web.RenderMode.InteractiveServer
 @implements IAsyncDisposable
-@using Microsoft.JSInterop
-@using BoidsSimulation.Core.Models
+
 @inject IJSRuntime JS
 @inject SimulationSettings Settings
+@inject BoidsSimulation.Web.Services.SimulationConnectionStatus ConnectionStatus
 
-<PageTitle>Shared Boids Simulation</PageTitle>
-
-<h1>Shared Boids Simulation</h1>
-
-<div class="mb-3">
-    <p>
-        Connection:
-        <strong>@_connectionStatus</strong>
-    </p>
-
-    <p>
-        Boids:
-        <strong>@(_boidCount?.ToString() ?? "Waiting for snapshot...")</strong>
-    </p>
-
-    @if (!string.IsNullOrWhiteSpace(_errorMessage))
-    {
-        <p class="text-danger" role="alert">@_errorMessage</p>
-    }
-
-    <button class="btn btn-primary"
-            @onclick="RequestSnapshotAsync"
-            disabled="@(!_isConnected)">
-        Refresh snapshot
-    </button>
-</div>
-
-<div class="w-100">
-    <canvas @ref="_canvas"
-            width="1000"
-            height="700"
-            role="img"
-            aria-label="Boids simulation world"
-            style="display: block; width: 100%; max-width: 1000px; height: auto; border: 1px solid #334155; border-radius: 6px;">
-        Your browser does not support HTML canvas.
+<section class="simulation-viewport">
+    <canvas
+        @ref="_canvas"
+        class="simulation-canvas"
+        aria-label="Interactive Boids simulation">
     </canvas>
-</div>
+</section>
 
 @code {
     private ElementReference _canvas;
     private IJSObjectReference? _module;
     private DotNetObjectReference<Simulation>? _dotNetReference;
-
-    private string _connectionStatus = "Initializing";
-    private string? _errorMessage;
-    private int? _boidCount;
-    private bool _isConnected;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -77,53 +43,18 @@
                 Settings.WorldWidth,
                 Settings.WorldHeight);
         }
-        catch (Exception ex)
+        catch
         {
-            _connectionStatus = "Connection failed";
-            _isConnected = false;
-            _errorMessage = ex.Message;
-
-            await InvokeAsync(StateHasChanged);
+            ConnectionStatus.Update("Disconnected");
+            throw;
         }
     }
 
     [JSInvokable]
     public Task OnConnectionStatusChanged(string status)
     {
-        return InvokeAsync(() =>
-        {
-            _connectionStatus = status;
-            _isConnected = status == "Connected";
-            StateHasChanged();
-        });
-    }
-
-    [JSInvokable]
-    public Task OnSnapshotReceived(int boidCount)
-    {
-        return InvokeAsync(() =>
-        {
-            _boidCount = boidCount;
-            _errorMessage = null;
-            StateHasChanged();
-        });
-    }
-
-    private async Task RequestSnapshotAsync()
-    {
-        if (_module is null || !_isConnected)
-        {
-            return;
-        }
-
-        try
-        {
-            await _module.InvokeVoidAsync("requestSnapshot");
-        }
-        catch (Exception ex)
-        {
-            _errorMessage = ex.Message;
-        }
+        ConnectionStatus.Update(status);
+        return Task.CompletedTask;
     }
 
     public async ValueTask DisposeAsync()
@@ -136,7 +67,7 @@
             }
             catch (JSDisconnectedException)
             {
-                // The Blazor circuit has already disconnected.
+                // The browser circuit is already disconnected.
             }
 
             try
@@ -145,7 +76,7 @@
             }
             catch (JSDisconnectedException)
             {
-                // The Blazor circuit has already disconnected.
+                // The browser circuit is already disconnected.
             }
         }
 
