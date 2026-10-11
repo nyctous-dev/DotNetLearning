@@ -4,6 +4,9 @@ using BoidsSimulation.Core.Simulation;
 using BoidsSimulation.Web.Components;
 using BoidsSimulation.Web.Endpoints;
 using Microsoft.Extensions.Configuration;
+using System.Numerics;
+using BoidsSimulation.Application.Sessions;
+using BoidsSimulation.Web.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -58,6 +61,52 @@ builder.Services.AddSingleton(simulationSettings);
 builder.Services.AddSingleton(initializationSettings);
 builder.Services.AddSingleton(seedProvider);
 builder.Services.AddSingleton(simulationState);
+
+// Create the initial population and authoritative simulation state.
+builder.Services.AddSingleton<SimulationState>(_ =>
+{
+    var random = Random.Shared;
+    var boids = new Boid[simulationSettings.InitialBoidCount];
+
+    for (var i = 0; i < boids.Length; i++)
+    {
+        var position = new Vector2(
+            random.NextSingle() * simulationSettings.WorldWidth,
+            random.NextSingle() * simulationSettings.WorldHeight);
+
+        var angle = random.NextSingle() * MathF.Tau;
+        var velocity = new Vector2(
+            MathF.Cos(angle),
+            MathF.Sin(angle)) * simulationSettings.MaxSpeed;
+
+        boids[i] = new Boid(i + 1, position, velocity);
+    }
+
+    return new SimulationState(boids);
+});
+
+// Register the simulation pipeline.
+builder.Services.AddSingleton<SimulationStepper>();
+builder.Services.AddSingleton<SimulationSession>();
+builder.Services.AddSingleton<SimulationLoop>();
+
+// Start the simulation with the ASP.NET Core host.
+builder.Services.AddHostedService<SimulationBackgroundService>();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 var app = builder.Build();
 

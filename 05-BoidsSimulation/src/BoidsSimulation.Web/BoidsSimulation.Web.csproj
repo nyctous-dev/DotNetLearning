@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\BoidsSimulation.Core\BoidsSimulation.Core.csproj" />
+    <ProjectReference Include="..\BoidsSimulation.Application\BoidsSimulation.Application.csproj" />
   </ItemGroup>
 
 </Project>

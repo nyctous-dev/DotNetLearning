@@ -1,4 +1,3 @@
-
 using BoidsSimulation.Core.Models;
 
 namespace BoidsSimulation.Core.Simulation;
@@ -8,7 +7,7 @@ public sealed class SimulationState
     private readonly Dictionary<int, Boid> _boidsById;
 
     public int BoidCount => _boidsById.Count;
-    
+
     internal IReadOnlyCollection<Boid> Boids => _boidsById.Values;
 
     public SimulationState(IReadOnlyList<Boid> population)
@@ -47,5 +46,21 @@ public sealed class SimulationState
 
         boid = null;
         return false;
+    }
+
+    public BoidStateSnapshot[] CopyBoidStates()
+    {
+        var copiedStates = new BoidStateSnapshot[_boidsById.Count];
+        var index = 0;
+
+        foreach (var boid in _boidsById.Values)
+        {
+            copiedStates[index++] = new BoidStateSnapshot(
+                boid.Id,
+                boid.Position,
+                boid.Velocity);
+        }
+
+        return copiedStates;
     }
 }
