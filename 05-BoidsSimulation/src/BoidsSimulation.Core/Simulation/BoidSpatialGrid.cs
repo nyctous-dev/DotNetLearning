@@ -3,6 +3,15 @@ using BoidsSimulation.Core.Models;
 
 namespace BoidsSimulation.Core.Simulation;
 
+/// <summary>
+/// Work performed by one spatial-grid neighborhood query.
+/// </summary>
+public readonly record struct BoidSpatialGridQueryMetrics(
+    int CellsVisited,
+    int OccupiedCellsVisited,
+    int LinkedListEntriesTraversed,
+    int CandidatesReturned);
+
 public sealed class BoidSpatialGrid
 {
     private readonly int _worldWidth;
@@ -150,7 +159,8 @@ public sealed class BoidSpatialGrid
             center,
             radius,
             destination,
-            returnPopulationIndices: false);
+            returnPopulationIndices: false,
+            out _);
     }
 
     /// <summary>
@@ -169,7 +179,26 @@ public sealed class BoidSpatialGrid
             center,
             radius,
             destination,
-            returnPopulationIndices: true);
+            returnPopulationIndices: true,
+            out _);
+    }
+
+    /// <summary>
+    /// Returns population indices and reports the work performed by the query.
+    /// The metrics are value data and do not allocate per query.
+    /// </summary>
+    public int QueryNeighborhoodIndices(
+        Vector2 center,
+        float radius,
+        Span<int> destination,
+        out BoidSpatialGridQueryMetrics metrics)
+    {
+        return QueryNeighborhoodCore(
+            center,
+            radius,
+            destination,
+            returnPopulationIndices: true,
+            out metrics);
     }
 
     /// <summary>
@@ -242,12 +271,19 @@ public sealed class BoidSpatialGrid
         Vector2 center,
         float radius,
         Span<int> destination,
-        bool returnPopulationIndices)
+        bool returnPopulationIndices,
+        out BoidSpatialGridQueryMetrics metrics)
     {
         ValidateQuery(center, radius);
 
+        var cellsVisited = 0;
+        var occupiedCellsVisited = 0;
+        var linkedListEntriesTraversed = 0;
+        var resultCount = 0;
+
         if (destination.IsEmpty || _boidCount == 0)
         {
+            metrics = new BoidSpatialGridQueryMetrics(0, 0, 0, 0);
             return 0;
         }
 
@@ -271,8 +307,6 @@ public sealed class BoidSpatialGrid
         var rowVisits = visitAllRows
             ? _rowCount
             : (2 * radiusInCells) + 1;
-
-        var resultCount = 0;
 
         // When every cell on an axis must be visited, walk each cell
         // exactly once rather than revisiting cells through world wrapping.
@@ -298,6 +332,8 @@ public sealed class BoidSpatialGrid
                     centerColumn + columnOffset,
                     _columnCount);
 
+                cellsVisited++;
+
                 var cellKey = GetCellKey(column, row);
 
                 if (!_cellHeads.TryGetValue(
@@ -307,10 +343,19 @@ public sealed class BoidSpatialGrid
                     continue;
                 }
 
+                occupiedCellsVisited++;
+
                 while (populationIndex != -1)
                 {
+                    linkedListEntriesTraversed++;
+
                     if (resultCount >= destination.Length)
                     {
+                        metrics = new BoidSpatialGridQueryMetrics(
+                            cellsVisited,
+                            occupiedCellsVisited,
+                            linkedListEntriesTraversed,
+                            resultCount);
                         return resultCount;
                     }
 
@@ -323,6 +368,12 @@ public sealed class BoidSpatialGrid
                 }
             }
         }
+
+        metrics = new BoidSpatialGridQueryMetrics(
+            cellsVisited,
+            occupiedCellsVisited,
+            linkedListEntriesTraversed,
+            resultCount);
 
         return resultCount;
     }

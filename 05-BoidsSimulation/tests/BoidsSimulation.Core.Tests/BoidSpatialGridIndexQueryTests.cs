@@ -1,3 +1,4 @@
+
 using System.Numerics;
 using BoidsSimulation.Core.Models;
 using BoidsSimulation.Core.Simulation;
@@ -50,8 +51,6 @@ public sealed class BoidSpatialGridIndexQueryTests
     [Fact]
     public void QueryNeighborhoodIndices_FindsBoidsAcrossWrappedWorldBoundary()
     {
-        // Arrange: these boids are close together across the horizontal
-        // edge of the wrapped world.
         var population = new[]
         {
             CreateBoid(1001, new Vector2(-49f, 0f)),
@@ -67,7 +66,6 @@ public sealed class BoidSpatialGridIndexQueryTests
 
         var destination = new int[10];
 
-        // Act
         var count = grid.QueryNeighborhoodIndices(
             new Vector2(-49f, 0f),
             radius: 5f,
@@ -75,7 +73,6 @@ public sealed class BoidSpatialGridIndexQueryTests
 
         var results = destination.AsSpan(0, count).ToArray();
 
-        // Assert
         Assert.Contains(0, results);
         Assert.Contains(1, results);
         Assert.DoesNotContain(2, results);
@@ -84,9 +81,6 @@ public sealed class BoidSpatialGridIndexQueryTests
     [Fact]
     public void QueryNeighborhoodIndices_DoesNotReturnDuplicateIndicesWhenQueryWraps()
     {
-        // Arrange: the search radius covers the entire small world.
-        // The query therefore wraps across the same cells multiple times
-        // unless the grid avoids revisiting cells.
         var population = new[]
         {
             CreateBoid(700, new Vector2(-8f, -8f)),
@@ -102,7 +96,6 @@ public sealed class BoidSpatialGridIndexQueryTests
 
         var destination = new int[population.Length];
 
-        // Act
         var count = grid.QueryNeighborhoodIndices(
             Vector2.Zero,
             radius: 100f,
@@ -110,7 +103,6 @@ public sealed class BoidSpatialGridIndexQueryTests
 
         var results = destination.AsSpan(0, count).ToArray();
 
-        // Assert
         Assert.Equal(population.Length, count);
         Assert.Equal(count, results.Distinct().Count());
 
@@ -122,7 +114,6 @@ public sealed class BoidSpatialGridIndexQueryTests
     [Fact]
     public void QueryNeighborhoodIndices_ReturnsZeroWhenDestinationIsEmpty()
     {
-        // Arrange
         var population = new[]
         {
             CreateBoid(101, Vector2.Zero)
@@ -134,20 +125,17 @@ public sealed class BoidSpatialGridIndexQueryTests
             cellSize: 10f,
             population);
 
-        // Act
         var count = grid.QueryNeighborhoodIndices(
             Vector2.Zero,
             radius: 10f,
             Span<int>.Empty);
 
-        // Assert
         Assert.Equal(0, count);
     }
 
     [Fact]
     public void QueryNeighborhoodIndices_UsesCurrentPopulationIndicesAfterRebuild()
     {
-        // Arrange
         var initialPopulation = new[]
         {
             CreateBoid(100, new Vector2(30f, 30f)),
@@ -170,7 +158,6 @@ public sealed class BoidSpatialGridIndexQueryTests
 
         var destination = new int[updatedPopulation.Length];
 
-        // Act
         var count = grid.QueryNeighborhoodIndices(
             new Vector2(-1f, 0f),
             radius: 5f,
@@ -178,8 +165,6 @@ public sealed class BoidSpatialGridIndexQueryTests
 
         var results = destination.AsSpan(0, count).ToArray();
 
-        // Assert: indices refer to the new population's ordering,
-        // not the IDs or ordering from the previous rebuild.
         Assert.Contains(0, results);
         Assert.Contains(1, results);
 
@@ -189,6 +174,67 @@ public sealed class BoidSpatialGridIndexQueryTests
                 index,
                 0,
                 updatedPopulation.Length - 1));
+    }
+
+    [Fact]
+    public void QueryNeighborhoodIndices_WithMetrics_ReportsVisitedCellsAndCandidates()
+    {
+        // Two boids occupy separate cells within the 3x3 search area.
+        var population = new[]
+        {
+            CreateBoid(101, new Vector2(-1f, 0f)),
+            CreateBoid(202, new Vector2(1f, 0f)),
+            CreateBoid(303, new Vector2(30f, 30f))
+        };
+
+        var grid = new BoidSpatialGrid(
+            worldWidth: 100,
+            worldHeight: 100,
+            cellSize: 10f,
+            population);
+
+        var destination = new int[10];
+
+        // Act
+        var count = grid.QueryNeighborhoodIndices(
+            new Vector2(-1f, 0f),
+            radius: 5f,
+            destination,
+            out var metrics);
+
+        // Assert: a radius of 5 with cell size 10 searches 3x3 cells.
+        Assert.Equal(2, count);
+        Assert.Equal(9, metrics.CellsVisited);
+        Assert.Equal(2, metrics.OccupiedCellsVisited);
+        Assert.Equal(2, metrics.LinkedListEntriesTraversed);
+        Assert.Equal(2, metrics.CandidatesReturned);
+    }
+
+    [Fact]
+    public void QueryNeighborhoodIndices_WithMetricsAndEmptyDestination_ReportsNoWork()
+    {
+        var population = new[]
+        {
+            CreateBoid(101, Vector2.Zero)
+        };
+
+        var grid = new BoidSpatialGrid(
+            worldWidth: 100,
+            worldHeight: 100,
+            cellSize: 10f,
+            population);
+
+        var count = grid.QueryNeighborhoodIndices(
+            Vector2.Zero,
+            radius: 10f,
+            Span<int>.Empty,
+            out var metrics);
+
+        Assert.Equal(0, count);
+        Assert.Equal(0, metrics.CellsVisited);
+        Assert.Equal(0, metrics.OccupiedCellsVisited);
+        Assert.Equal(0, metrics.LinkedListEntriesTraversed);
+        Assert.Equal(0, metrics.CandidatesReturned);
     }
 
     private static Boid CreateBoid(int id, Vector2 position)
