@@ -32,6 +32,8 @@ public sealed class SimulationStepper
     private readonly float _separationRadiusSquared;
     private readonly float _alignmentRadiusSquared;
     private readonly float _cohesionRadiusSquared;
+    private readonly float _searchRadius;
+    private readonly float _searchRadiusSquared;
 
     private Boid[] _populationBuffer = Array.Empty<Boid>();
     private Vector2[] _nextVelocities = Array.Empty<Vector2>();
@@ -59,6 +61,16 @@ public sealed class SimulationStepper
         _cohesionRadiusSquared =
             settings.CohesionRadius * settings.CohesionRadius;
 
+        // These settings do not change during this stepper's lifetime,
+        // so calculate the broad-phase search radius once.
+        _searchRadius = MathF.Max(
+            settings.SeparationRadius,
+            MathF.Max(
+                settings.AlignmentRadius,
+                settings.CohesionRadius));
+        
+        _searchRadiusSquared = _searchRadius * _searchRadius;
+
         _candidateBuffer =
             new int[settings.MaxNeighborEvaluationsPerBoid + 1];
 
@@ -82,7 +94,7 @@ public sealed class SimulationStepper
             return;
         }
 
-        // Phase 1: Prepare the reusable buffers and copy population references.
+        // Phase 1: Prepare reusable buffers and population ordering.
         var phaseStart = Stopwatch.GetTimestamp();
 
         EnsureCapacity(populationCount);
@@ -97,7 +109,7 @@ public sealed class SimulationStepper
         var populationPreparationDuration =
             Stopwatch.GetElapsedTime(phaseStart);
 
-        // Phase 2: Rebuild the spatial grid for the current population.
+        // Phase 2: Build the spatial grid for the current positions.
         phaseStart = Stopwatch.GetTimestamp();
 
         _grid.Rebuild(_populationBuffer);
@@ -105,7 +117,7 @@ public sealed class SimulationStepper
         var gridRebuildDuration =
             Stopwatch.GetElapsedTime(phaseStart);
 
-        // Phase 3: Calculate all next velocities before mutating any boid.
+        // Phase 3: Calculate every next velocity before mutating any boid.
         phaseStart = Stopwatch.GetTimestamp();
 
         for (var i = 0; i < populationCount; i++)
@@ -135,7 +147,7 @@ public sealed class SimulationStepper
         var steeringCalculationDuration =
             Stopwatch.GetElapsedTime(phaseStart);
 
-        // Phase 4: Commit velocities after steering calculations finish.
+        // Phase 4: Commit the calculated velocities.
         phaseStart = Stopwatch.GetTimestamp();
 
         for (var i = 0; i < populationCount; i++)
@@ -177,8 +189,8 @@ public sealed class SimulationStepper
         var positionUpdateDuration =
             Stopwatch.GetElapsedTime(phaseStart);
 
-        // Capture the complete measurements for this step.
-        var totalDuration = Stopwatch.GetElapsedTime(totalStart);
+        var totalDuration =
+            Stopwatch.GetElapsedTime(totalStart);
 
         LastStepTimings = new SimulationStepTimings(
             populationPreparationDuration,
@@ -193,20 +205,14 @@ public sealed class SimulationStepper
         int boidIndex,
         Boid boid)
     {
-        var searchRadius = MathF.Max(
-            _settings.SeparationRadius,
-            MathF.Max(
-                _settings.AlignmentRadius,
-                _settings.CohesionRadius));
-
-        if (searchRadius <= 0f)
+        if (_searchRadius <= 0f)
         {
             return Vector2.Zero;
         }
 
         var candidateCount = _grid.QueryNeighborhoodIndices(
             boid.Position,
-            searchRadius,
+            _searchRadius,
             _candidateBuffer.AsSpan());
 
         var separationSum = Vector2.Zero;
@@ -226,7 +232,7 @@ public sealed class SimulationStepper
         {
             var candidateIndex = _candidateBuffer[i];
 
-            // The grid returns population indices, not boid IDs.
+            // Grid queries return population indices, not boid IDs.
             if (candidateIndex == boidIndex)
             {
                 continue;
@@ -245,7 +251,45 @@ public sealed class SimulationStepper
                 boid.Position,
                 neighbor.Position);
 
+            // Reject candidates outside the largest possible influence radius
+            // before calculating squared distance.
+            if (MathF.Abs(offset.X) > _searchRadius ||
+                MathF.Abs(offset.Y) > _searchRadius)
+            {
+                continue;
+            }
+
             var distanceSquared = offset.LengthSquared();
+
+            // The candidate is inside the bounding square but outside the
+            // circular search radius, so none of the steering rules can use it.
+            if (distanceSquared > _searchRadiusSquared)
+            {
+                continue;
+            }
+
+            if (_separationRadiusSquared > 0f &&
+                distanceSquared > Epsilon &&
+                distanceSquared <= _separationRadiusSquared)
+            {
+                // Give closer boids greater influence on separation.
+                separationSum -= offset / distanceSquared;
+                separationCount++;
+            }
+
+            if (_alignmentRadiusSquared > 0f &&
+                distanceSquared <= _alignmentRadiusSquared)
+            {
+                alignmentVelocitySum += neighbor.Velocity;
+                alignmentCount++;
+            }
+
+            if (_cohesionRadiusSquared > 0f &&
+                distanceSquared <= _cohesionRadiusSquared)
+            {
+                cohesionOffsetSum += offset;
+                cohesionCount++;
+            }
 
             if (_separationRadiusSquared > 0f &&
                 distanceSquared > Epsilon &&
@@ -302,15 +346,21 @@ public sealed class SimulationStepper
             return Vector2.Zero;
         }
 
-        var averageDirection = separationSum / neighborCount;
+        // The old code tested (separationSum / neighborCount).LengthSquared()
+        // against Epsilon. Apply the equivalent threshold to the sum to
+        // avoid dividing both vector components by the neighbor count.
+        var count = (float)neighborCount;
 
-        if (averageDirection.LengthSquared() <= Epsilon)
+        if (separationSum.LengthSquared() <=
+            Epsilon * count * count)
         {
             return Vector2.Zero;
         }
 
+        // Dividing by a positive count changes magnitude, not direction.
+        // Normalize the sum directly to avoid an intermediate vector divide.
         var desiredVelocity =
-            Vector2.Normalize(averageDirection) *
+            Vector2.Normalize(separationSum) *
             _settings.MaxSpeed;
 
         return desiredVelocity - boid.Velocity;
@@ -326,21 +376,18 @@ public sealed class SimulationStepper
             return Vector2.Zero;
         }
 
-        var averageVelocity =
-            alignmentVelocitySum / neighborCount;
+        var count = (float)neighborCount;
 
-        Vector2 desiredVelocity;
+        // Preserve the previous near-zero test on the average velocity.
+        if (alignmentVelocitySum.LengthSquared() <=
+            Epsilon * count * count)
+        {
+            return Vector2.Zero - boid.Velocity;
+        }
 
-        if (averageVelocity.LengthSquared() <= Epsilon)
-        {
-            desiredVelocity = Vector2.Zero;
-        }
-        else
-        {
-            desiredVelocity =
-                Vector2.Normalize(averageVelocity) *
-                _settings.MaxSpeed;
-        }
+        var desiredVelocity =
+            Vector2.Normalize(alignmentVelocitySum) *
+            _settings.MaxSpeed;
 
         return desiredVelocity - boid.Velocity;
     }
@@ -355,16 +402,17 @@ public sealed class SimulationStepper
             return Vector2.Zero;
         }
 
-        var averageOffset =
-            cohesionOffsetSum / neighborCount;
+        var count = (float)neighborCount;
 
-        if (averageOffset.LengthSquared() <= Epsilon)
+        // Preserve the previous near-zero test on the average offset.
+        if (cohesionOffsetSum.LengthSquared() <=
+            Epsilon * count * count)
         {
             return Vector2.Zero;
         }
 
         var desiredVelocity =
-            Vector2.Normalize(averageOffset) *
+            Vector2.Normalize(cohesionOffsetSum) *
             _settings.MaxSpeed;
 
         return desiredVelocity - boid.Velocity;
@@ -402,8 +450,8 @@ public sealed class SimulationStepper
 
     private void EnsureCapacity(int populationCount)
     {
-        // Keep buffers exactly sized to the population so the grid can
-        // rebuild directly from the array without an ArraySegment wrapper.
+        // Keep the buffers exactly sized to the population, so the grid
+        // can rebuild from the same array without an ArraySegment wrapper.
         // Buffers are reused while the population size remains stable.
         if (_populationBuffer.Length != populationCount)
         {
