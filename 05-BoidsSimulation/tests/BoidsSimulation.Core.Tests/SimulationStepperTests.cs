@@ -1,6 +1,4 @@
-
 using System.Numerics;
-using Microsoft.Extensions.Configuration;
 using BoidsSimulation.Core.Models;
 using BoidsSimulation.Core.Simulation;
 
@@ -8,234 +6,290 @@ namespace BoidsSimulation.Core.Tests;
 
 public sealed class SimulationStepperTests
 {
-    private sealed record TestConfiguration(
-        SimulationSettings Settings,
-        SimulationLimits Limits);
-
-    private static TestConfiguration LoadConfiguration()
+    private static readonly SimulationSettings DefaultSettings = new()
     {
-        var configuration = new ConfigurationBuilder()
-            .SetBasePath(AppContext.BaseDirectory)
-            .AddJsonFile(
-                "appsettings.json",
-                optional: false,
-                reloadOnChange: false)
-            .Build();
+        WorldWidth = 100,
+        WorldHeight = 80,
+        MaxBoids = 100,
+        InitialBoidCount = 0,
 
-        var settings = configuration
-            .GetSection("Simulation")
-            .Get<SimulationSettings>()
-            ?? throw new InvalidOperationException(
-                "Missing Simulation configuration.");
+        SeparationRadius = 10f,
+        AlignmentRadius = 20f,
+        CohesionRadius = 30f,
+        CellSize = 10f,
 
-        var limits = configuration
-            .GetSection("SimulationLimits")
-            .Get<SimulationLimits>()
-            ?? throw new InvalidOperationException(
-                "Missing SimulationLimits configuration.");
+        SeparationWeight = 1.5f,
+        AlignmentWeight = 1f,
+        CohesionWeight = 1f,
 
-        return new TestConfiguration(settings, limits);
-    }
+        MaxSpeed = 10f,
+        MaxSteeringForce = 5f,
+        AttractionForce = 5f,
+        RepulsionForce = 5f,
+        InteractionRadius = 10f,
+        FixedTimeStep = 0.1f,
 
-    private static (SimulationSettings Settings, SimulationLimits Limits)
-        CreateTestConfiguration()
+        MaxNeighborEvaluationsPerBoid = 50
+    };
+
+    private static readonly SimulationLimits Limits = new()
     {
-        var configuration = LoadConfiguration();
-
-        var settings = configuration.Settings with
+        WorldWidth = new SimulationLimits.IntegerRange
         {
-            WorldWidth = 1000,
-            WorldHeight = 800,
-            FixedTimeStep = 0.1f
-        };
+            Min = 1,
+            Max = 100_000
+        },
+        WorldHeight = new SimulationLimits.IntegerRange
+        {
+            Min = 1,
+            Max = 100_000
+        },
+        MaxBoids = new SimulationLimits.IntegerRange
+        {
+            Min = 1,
+            Max = 100_000
+        },
+        InitialBoidCount = new SimulationLimits.IntegerRange
+        {
+            Min = 0,
+            Max = 100_000
+        },
 
-        return (settings, configuration.Limits);
-    }
+        SeparationRadius = new SimulationLimits.FloatRange
+        {
+            Min = 0f,
+            Max = 10_000f
+        },
+        AlignmentRadius = new SimulationLimits.FloatRange
+        {
+            Min = 0f,
+            Max = 10_000f
+        },
+        CohesionRadius = new SimulationLimits.FloatRange
+        {
+            Min = 0f,
+            Max = 10_000f
+        },
+        CellSize = new SimulationLimits.FloatRange
+        {
+            Min = 1f,
+            Max = 10_000f
+        },
 
-    private static Boid CreateBoid(
-        int id,
-        Vector2 position,
-        Vector2 velocity)
-    {
-        return new Boid(id, position, velocity);
-    }
+        SeparationWeight = new SimulationLimits.FloatRange
+        {
+            Min = 0f,
+            Max = 100f
+        },
+        AlignmentWeight = new SimulationLimits.FloatRange
+        {
+            Min = 0f,
+            Max = 100f
+        },
+        CohesionWeight = new SimulationLimits.FloatRange
+        {
+            Min = 0f,
+            Max = 100f
+        },
 
-    private static SimulationStepper CreateStepper(
-        SimulationSettings settings,
-        SimulationLimits limits)
-    {
-        return new SimulationStepper(settings, limits);
-    }
+        MaxSpeed = new SimulationLimits.FloatRange
+        {
+            Min = 0.001f,
+            Max = 10_000f
+        },
+        MaxSteeringForce = new SimulationLimits.FloatRange
+        {
+            Min = 0f,
+            Max = 10_000f
+        },
+        AttractionForce = new SimulationLimits.FloatRange
+        {
+            Min = 0f,
+            Max = 10_000f
+        },
+        RepulsionForce = new SimulationLimits.FloatRange
+        {
+            Min = 0f,
+            Max = 10_000f
+        },
+        InteractionRadius = new SimulationLimits.FloatRange
+        {
+            Min = 0f,
+            Max = 10_000f
+        },
+        FixedTimeStep = new SimulationLimits.FloatRange
+        {
+            Min = 0.001f,
+            Max = 0.1f
+        },
+
+        MaxNeighborEvaluationsPerBoid =
+            new SimulationLimits.IntegerRange
+            {
+                Min = 1,
+                Max = 10_000
+            }
+    };
 
     [Fact]
-    public void Step_AdvancesPositionByVelocityTimesTimeStep()
+    public void Step_AdvancesPositionByVelocityAndFixedTimeStep()
     {
-        var (settings, limits) = CreateTestConfiguration();
         var boid = CreateBoid(
-            1,
-            new Vector2(10f, 20f),
-            new Vector2(30f, -40f));
+            id: 1,
+            position: new Vector2(10f, 20f),
+            velocity: new Vector2(10f, -20f));
 
-        var state = new SimulationState(new[] { boid });
-        var stepper = CreateStepper(settings, limits);
+        var state = CreateState(boid);
+        var stepper = CreateStepper();
 
         stepper.Step(state);
 
-        Assert.Equal(
-            new Vector2(13f, 16f),
-            boid.Position);
+        Assert.Equal(11f, boid.Position.X, 5);
+        Assert.Equal(18f, boid.Position.Y, 5);
     }
 
     [Fact]
     public void Step_DoesNotChangeVelocity()
     {
-        var (settings, limits) = CreateTestConfiguration();
-        var originalVelocity = new Vector2(30f, -40f);
+        var initialVelocity = new Vector2(7f, -3f);
         var boid = CreateBoid(
-            1,
-            new Vector2(10f, 20f),
-            originalVelocity);
+            id: 1,
+            position: Vector2.Zero,
+            velocity: initialVelocity);
 
-        var state = new SimulationState(new[] { boid });
-        var stepper = CreateStepper(settings, limits);
+        var state = CreateState(boid);
+        var stepper = CreateStepper();
 
         stepper.Step(state);
 
-        Assert.Equal(originalVelocity, boid.Velocity);
+        Assert.Equal(initialVelocity, boid.Velocity);
     }
 
     [Fact]
-    public void Step_WrapsAcrossRightBoundary()
+    public void Step_WrapsPositionAcrossPositiveXBoundary()
     {
-        var (settings, limits) = CreateTestConfiguration();
         var boid = CreateBoid(
-            1,
-            new Vector2(499f, 0f),
-            new Vector2(20f, 0f));
+            id: 1,
+            position: new Vector2(49f, 0f),
+            velocity: new Vector2(20f, 0f));
 
-        var state = new SimulationState(new[] { boid });
-        var stepper = CreateStepper(settings, limits);
+        var state = CreateState(boid);
+        var stepper = CreateStepper();
 
         stepper.Step(state);
 
-        Assert.Equal(-499f, boid.Position.X);
-        Assert.Equal(0f, boid.Position.Y);
+        Assert.Equal(-49f, boid.Position.X, 5);
+        Assert.Equal(0f, boid.Position.Y, 5);
     }
 
     [Fact]
-    public void Step_WrapsAcrossLeftBoundary()
+    public void Step_WrapsPositionAcrossNegativeXBoundary()
     {
-        var (settings, limits) = CreateTestConfiguration();
         var boid = CreateBoid(
-            1,
-            new Vector2(-499f, 0f),
-            new Vector2(-20f, 0f));
+            id: 1,
+            position: new Vector2(-49f, 0f),
+            velocity: new Vector2(-20f, 0f));
 
-        var state = new SimulationState(new[] { boid });
-        var stepper = CreateStepper(settings, limits);
+        var state = CreateState(boid);
+        var stepper = CreateStepper();
 
         stepper.Step(state);
 
-        Assert.Equal(499f, boid.Position.X);
-        Assert.Equal(0f, boid.Position.Y);
+        Assert.Equal(49f, boid.Position.X, 5);
+        Assert.Equal(0f, boid.Position.Y, 5);
     }
 
     [Fact]
-    public void Step_WrapsAcrossTopBoundary()
+    public void Step_WrapsPositionAcrossPositiveYBoundary()
     {
-        var (settings, limits) = CreateTestConfiguration();
         var boid = CreateBoid(
-            1,
-            new Vector2(0f, 399f),
-            new Vector2(0f, 20f));
+            id: 1,
+            position: new Vector2(0f, 39f),
+            velocity: new Vector2(0f, 20f));
 
-        var state = new SimulationState(new[] { boid });
-        var stepper = CreateStepper(settings, limits);
+        var state = CreateState(boid);
+        var stepper = CreateStepper();
 
         stepper.Step(state);
 
-        Assert.Equal(0f, boid.Position.X);
-        Assert.Equal(-399f, boid.Position.Y);
+        Assert.Equal(0f, boid.Position.X, 5);
+        Assert.Equal(-39f, boid.Position.Y, 5);
     }
 
     [Fact]
-    public void Step_WrapsAcrossBottomBoundary()
+    public void Step_WrapsPositionAcrossNegativeYBoundary()
     {
-        var (settings, limits) = CreateTestConfiguration();
         var boid = CreateBoid(
-            1,
-            new Vector2(0f, -399f),
-            new Vector2(0f, -20f));
+            id: 1,
+            position: new Vector2(0f, -39f),
+            velocity: new Vector2(0f, -20f));
 
-        var state = new SimulationState(new[] { boid });
-        var stepper = CreateStepper(settings, limits);
+        var state = CreateState(boid);
+        var stepper = CreateStepper();
 
         stepper.Step(state);
 
-        Assert.Equal(0f, boid.Position.X);
-        Assert.Equal(399f, boid.Position.Y);
+        Assert.Equal(0f, boid.Position.X, 5);
+        Assert.Equal(39f, boid.Position.Y, 5);
     }
 
     [Fact]
-    public void Step_WrapsAcrossMultipleWorldWidths()
+    public void Step_WrapsBothAxesWhenBothBoundariesAreCrossed()
     {
-        var (settings, limits) = CreateTestConfiguration();
         var boid = CreateBoid(
-            1,
-            new Vector2(0f, 0f),
-            new Vector2(20050f, 0f));
+            id: 1,
+            position: new Vector2(49f, 39f),
+            velocity: new Vector2(20f, 20f));
 
-        var state = new SimulationState(new[] { boid });
-        var stepper = CreateStepper(settings, limits);
+        var state = CreateState(boid);
+        var stepper = CreateStepper();
 
         stepper.Step(state);
 
-        // Displacement is 2005 units in a 1000-unit-wide world.
-        Assert.Equal(5f, boid.Position.X);
-        Assert.Equal(0f, boid.Position.Y);
+        Assert.Equal(-49f, boid.Position.X, 5);
+        Assert.Equal(-39f, boid.Position.Y, 5);
     }
 
     [Fact]
-    public void Step_WrapsBothAxesInSameStep()
+    public void Step_WrapsCoordinatesThatCrossMultipleWorldWidths()
     {
-        var (settings, limits) = CreateTestConfiguration();
         var boid = CreateBoid(
-            1,
-            new Vector2(499f, 399f),
-            new Vector2(20f, 20f));
+            id: 1,
+            position: Vector2.Zero,
+            velocity: new Vector2(2500f, -850f));
 
-        var state = new SimulationState(new[] { boid });
-        var stepper = CreateStepper(settings, limits);
+        var state = CreateState(boid);
+        var stepper = CreateStepper();
 
         stepper.Step(state);
 
-        Assert.Equal(-499f, boid.Position.X);
-        Assert.Equal(-399f, boid.Position.Y);
+        Assert.Equal(-50f, boid.Position.X, 5);
+        Assert.Equal(-5f, boid.Position.Y, 5);
     }
 
     [Fact]
-    public void Step_LeavesPositionInsideBoundsWhenNoWrappingIsNeeded()
+    public void Step_LeavesPositionInsideWorldWhenNoBoundaryIsCrossed()
     {
-        var (settings, limits) = CreateTestConfiguration();
+        var initialPosition = new Vector2(10f, 20f);
         var boid = CreateBoid(
-            1,
-            new Vector2(100f, -100f),
-            new Vector2(10f, 20f));
+            id: 1,
+            position: initialPosition,
+            velocity: new Vector2(10f, -5f));
 
-        var state = new SimulationState(new[] { boid });
-        var stepper = CreateStepper(settings, limits);
+        var state = CreateState(boid);
+        var stepper = CreateStepper();
 
         stepper.Step(state);
 
-        Assert.Equal(new Vector2(101f, -98f), boid.Position);
+        Assert.Equal(11f, boid.Position.X, 5);
+        Assert.Equal(19.5f, boid.Position.Y, 5);
     }
 
     [Fact]
     public void Step_HandlesEmptyPopulation()
     {
-        var (settings, limits) = CreateTestConfiguration();
         var state = new SimulationState(Array.Empty<Boid>());
-        var stepper = CreateStepper(settings, limits);
+        var stepper = CreateStepper();
 
         var exception = Record.Exception(() => stepper.Step(state));
 
@@ -246,16 +300,42 @@ public sealed class SimulationStepperTests
     [Fact]
     public void Constructor_RejectsInvalidSettings()
     {
-        var (settings, limits) = CreateTestConfiguration();
-
-        var invalidSettings = settings with
+        var invalidSettings = DefaultSettings with
         {
-            FixedTimeStep = float.NaN
+            CellSize = 0f
         };
 
-        Assert.Throws<ArgumentOutOfRangeException>(() =>
-        {
-            CreateStepper(invalidSettings, limits);
-        });
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => new SimulationStepper(invalidSettings, Limits));
+    }
+
+    [Fact]
+    public void Step_RejectsNullState()
+    {
+        var stepper = CreateStepper();
+
+        Assert.Throws<ArgumentNullException>(
+            () => stepper.Step(null!));
+    }
+
+    private static SimulationStepper CreateStepper(
+        SimulationSettings? settings = null)
+    {
+        return new SimulationStepper(
+            settings ?? DefaultSettings,
+            Limits);
+    }
+
+    private static SimulationState CreateState(params Boid[] boids)
+    {
+        return new SimulationState(boids);
+    }
+
+    private static Boid CreateBoid(
+        int id,
+        Vector2 position,
+        Vector2 velocity)
+    {
+        return new Boid(id, position, velocity);
     }
 }

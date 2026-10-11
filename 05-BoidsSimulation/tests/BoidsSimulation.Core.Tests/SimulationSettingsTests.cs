@@ -58,6 +58,36 @@ public sealed class SimulationSettingsTests
         configuration.Settings.Validate(configuration.Limits);
     }
 
+    [Theory]
+    [InlineData("CellSize", 10f, 1f, 10_000f)]
+    [InlineData("MaxNeighborEvaluationsPerBoid", 50, 1, 10_000)]
+    public void NewSettings_ExposeConfiguredDefaultsAndLimits(
+        string settingName,
+        object expectedDefault,
+        object expectedMinimum,
+        object expectedMaximum)
+    {
+        var configuration = LoadConfiguration();
+
+        var settingProperty = typeof(SimulationSettings).GetProperty(settingName);
+        Assert.NotNull(settingProperty);
+        Assert.Equal(expectedDefault, settingProperty.GetValue(configuration.Settings));
+
+        var limitProperty = typeof(SimulationLimits).GetProperty(settingName);
+        Assert.NotNull(limitProperty);
+
+        var range = limitProperty.GetValue(configuration.Limits);
+        Assert.NotNull(range);
+
+        var minimumProperty = range.GetType().GetProperty("Min");
+        var maximumProperty = range.GetType().GetProperty("Max");
+
+        Assert.NotNull(minimumProperty);
+        Assert.NotNull(maximumProperty);
+        Assert.Equal(expectedMinimum, minimumProperty.GetValue(range));
+        Assert.Equal(expectedMaximum, maximumProperty.GetValue(range));
+    }
+
     public static IEnumerable<object[]> SettingBoundaryCases()
     {
         var configuration = LoadConfiguration();
@@ -348,18 +378,57 @@ public sealed class SimulationSettingsTests
             nameof(SimulationSettings.FixedTimeStep) =>
                 settings with { FixedTimeStep = (float)value },
 
-            _ => throw new ArgumentOutOfRangeException(
+            // Allows tests for planned settings to compile before their model
+            // properties are added. Once present, the property is set normally.
+            _ => WithSettingValueByReflection(settings, settingName, value)
+        };
+    }
+
+    private static SimulationSettings WithSettingValueByReflection(
+        SimulationSettings settings,
+        string settingName,
+        object value)
+    {
+        var property = typeof(SimulationSettings).GetProperty(settingName)
+            ?? throw new ArgumentOutOfRangeException(
                 nameof(settingName),
                 settingName,
-                "Unknown simulation setting.")
+                "Unknown simulation setting.");
+
+        var candidate = settings with
+        {
+            InitialBoidCount = settings.InitialBoidCount
         };
+
+        property.SetValue(candidate, value);
+        return candidate;
     }
 
     public static IEnumerable<object[]> SettingNames()
     {
-        return typeof(SimulationSettings)
+        var propertyNames = typeof(SimulationSettings)
             .GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .Select(property => new object[] { property.Name });
+            .Select(property => property.Name)
+            .ToHashSet(StringComparer.Ordinal);
+
+        foreach (var propertyName in propertyNames)
+        {
+            yield return new object[] { propertyName };
+        }
+
+        // Run the missing-setting and invalid-binding tests for these planned
+        // settings now; the reflection-based enumeration takes over once added.
+        foreach (var plannedSettingName in new[]
+                 {
+                     "CellSize",
+                     "MaxNeighborEvaluationsPerBoid"
+                 })
+        {
+            if (!propertyNames.Contains(plannedSettingName))
+            {
+                yield return new object[] { plannedSettingName };
+            }
+        }
     }
 
     [Theory]
