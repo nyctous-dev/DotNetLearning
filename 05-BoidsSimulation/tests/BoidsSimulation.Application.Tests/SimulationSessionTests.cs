@@ -1,5 +1,6 @@
 using System.Numerics;
 using BoidsSimulation.Application.Sessions;
+using BoidsSimulation.Application.Settings;
 using BoidsSimulation.Core.Models;
 using BoidsSimulation.Core.Simulation;
 
@@ -86,12 +87,98 @@ public sealed class SimulationSessionTests
         Assert.NotSame(previousSnapshot, currentSnapshot);
     }
 
+    [Fact]
+    public void GetBehaviorSettings_ReturnsCurrentSettings()
+    {
+        // Arrange
+        var (session, _) = CreateSettingsAwareSession(
+            new Boid(1, Vector2.Zero, Vector2.Zero));
+
+        // Act
+        var actual = session.GetBehaviorSettings();
+
+        // Assert
+        Assert.Equal(SimulationBehaviorSettings.From(Settings), actual);
+    }
+
+    [Fact]
+    public void UpdateBehaviorSettings_UpdatesSettingsAndLiveStepper()
+    {
+        // Arrange
+        var boid = new Boid(1, new Vector2(10f, 20f), Vector2.Zero);
+        var (session, _) = CreateSettingsAwareSession(boid);
+        var requested = SimulationBehaviorSettings.From(Settings) with
+        {
+            MaxSpeed = 0.1f
+        };
+
+        // Act
+        var updated = session.UpdateBehaviorSettings(requested);
+
+        session.SetInteraction(
+            "test-client",
+            new Vector2(11f, 20f),
+            BoidInteractionMode.Attract);
+        session.Advance();
+        var snapshot = session.GetSnapshot();
+
+        // Assert
+        Assert.Equal(requested, updated);
+        Assert.Equal(requested, session.GetBehaviorSettings());
+        Assert.InRange(
+            snapshot.Boids[0].Velocity.Length(),
+            0.099f,
+            0.101f);
+    }
+
+    [Fact]
+    public void UpdateBehaviorSettings_InvalidSettingsDoNotReplaceCurrentSettings()
+    {
+        // Arrange
+        var (session, _) = CreateSettingsAwareSession(
+            new Boid(1, Vector2.Zero, Vector2.Zero));
+        var original = session.GetBehaviorSettings();
+        var invalid = original with
+        {
+            MaxSpeed = 100_001f
+        };
+
+        // Act / Assert
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => session.UpdateBehaviorSettings(invalid));
+
+        Assert.Equal(original, session.GetBehaviorSettings());
+    }
+
+    [Fact]
+    public void GetBehaviorSettings_ThrowsWhenNoSettingsStoreIsConfigured()
+    {
+        // Arrange
+        var session = CreateSession(
+            new Boid(1, Vector2.Zero, Vector2.Zero));
+
+        // Act / Assert
+        Assert.Throws<InvalidOperationException>(
+            () => session.GetBehaviorSettings());
+    }
+
     private static SimulationSession CreateSession(params Boid[] boids)
     {
         var state = new SimulationState(boids);
         var stepper = new SimulationStepper(Settings, Limits);
 
         return new SimulationSession(state, stepper);
+    }
+
+    private static (SimulationSession Session, SimulationState State)
+        CreateSettingsAwareSession(params Boid[] boids)
+    {
+        var state = new SimulationState(boids);
+        var stepper = new SimulationStepper(Settings, Limits);
+        var settingsStore = new SimulationSettingsStore(Settings, Limits);
+        var session = new SimulationSession(state, stepper, settingsStore);
+
+        return (session, state);
     }
 
     private static SimulationLimits CreateLimits()

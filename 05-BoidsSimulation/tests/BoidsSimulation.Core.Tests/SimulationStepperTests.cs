@@ -360,6 +360,53 @@ public sealed class SimulationStepperTests
     }
 
     [Fact]
+    public void UpdateBehaviorSettings_AppliesNewMaximumSpeed()
+    {
+        var stepper = CreateStepper();
+
+        stepper.UpdateBehaviorSettings(
+            DefaultSettings with
+            {
+                MaxSpeed = 0.1f
+            });
+
+        var boid = CreateBoid(
+            1,
+            new Vector2(1f, 0f),
+            Vector2.Zero);
+
+        var state = CreateState(boid);
+
+        var interactions = new[]
+        {
+            new BoidInteraction(
+                new Vector2(0f, 0f),
+                BoidInteractionMode.Attract)
+        };
+
+        stepper.Step(state, interactions);
+
+        Assert.InRange(
+            boid.Velocity.Length(),
+            0.09999f,
+            0.10001f);
+    }
+
+    [Fact]
+    public void UpdateBehaviorSettings_RejectsStructuralChanges()
+    {
+        var stepper = CreateStepper();
+
+        var changedSettings = DefaultSettings with
+        {
+            CellSize = 5f
+        };
+
+        Assert.Throws<ArgumentException>(
+            () => stepper.UpdateBehaviorSettings(changedSettings));
+    }
+
+    [Fact]
     public void Constructor_RejectsInvalidSettings()
     {
         var invalidSettings = DefaultSettings with

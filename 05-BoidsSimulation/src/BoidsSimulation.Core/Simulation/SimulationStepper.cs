@@ -61,17 +61,21 @@ public sealed class SimulationStepper
 {
     private const float Epsilon = 1e-6f;
     private const int ChunksPerProcessor = 4;
-    private readonly SimulationSettings _settings;
+    private readonly object _settingsSyncRoot = new();
+    private readonly SimulationLimits _limits;
+    private SimulationSettings _settings;
+
     private readonly BoidSpatialGrid _grid;
     private readonly int _parallelChunkCapacity;
     private readonly int[][] _candidateBuffers;
     private readonly SteeringWorkAccumulator[] _chunkWork;
-    private readonly float _separationRadiusSquared;
-    private readonly float _alignmentRadiusSquared;
-    private readonly float _cohesionRadiusSquared;
-    private readonly float _searchRadius;
-    private readonly float _searchRadiusSquared;
-    private readonly float _interactionRadiusSquared;
+
+    private float _separationRadiusSquared;
+    private float _alignmentRadiusSquared;
+    private float _cohesionRadiusSquared;
+    private float _searchRadius;
+    private float _searchRadiusSquared;
+    private float _interactionRadiusSquared;
     private readonly int[] _evaluationHistogram;
     private Boid[] _populationBuffer = Array.Empty<Boid>();
     private Vector2[] _nextVelocities = Array.Empty<Vector2>();
@@ -115,21 +119,9 @@ public sealed class SimulationStepper
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(limits);
         settings.Validate(limits);
+        _limits = limits;
         _settings = settings;
-        _separationRadiusSquared =
-            settings.SeparationRadius * settings.SeparationRadius;
-        _alignmentRadiusSquared =
-            settings.AlignmentRadius * settings.AlignmentRadius;
-        _cohesionRadiusSquared =
-            settings.CohesionRadius * settings.CohesionRadius;
-        _searchRadius = MathF.Max(
-            settings.SeparationRadius,
-            MathF.Max(
-                settings.AlignmentRadius,
-                settings.CohesionRadius));
-        _searchRadiusSquared = _searchRadius * _searchRadius;
-        _interactionRadiusSquared =
-            settings.InteractionRadius * settings.InteractionRadius;
+        RecalculateDerivedSettings(settings);
         // More chunks than processors let the scheduler balance uneven boid
         // workloads without sharing per-chunk scratch buffers or counters.
         _parallelChunkCapacity =
@@ -151,16 +143,61 @@ public sealed class SimulationStepper
             settings.CellSize,
             Array.Empty<Boid>());
     }
+    public void UpdateBehaviorSettings(SimulationSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        // Validate every setting against the configured application limits.
+        settings.Validate(_limits);
+
+        lock (_settingsSyncRoot)
+        {
+            // These settings affect the grid, allocated buffers, population
+            // management, or simulation timer. They cannot change through this
+            // behavior-settings update method.
+            if (settings.WorldWidth != _settings.WorldWidth ||
+                settings.WorldHeight != _settings.WorldHeight ||
+                settings.MaxBoids != _settings.MaxBoids ||
+                settings.InitialBoidCount != _settings.InitialBoidCount ||
+                settings.CellSize != _settings.CellSize ||
+                settings.FixedTimeStep != _settings.FixedTimeStep ||
+                settings.MaxNeighborEvaluationsPerBoid !=
+                    _settings.MaxNeighborEvaluationsPerBoid)
+            {
+                throw new ArgumentException(
+                    "Runtime behavior updates cannot change world dimensions, " +
+                    "population limits, cell size, time step, or the neighbor " +
+                    "evaluation limit.",
+                    nameof(settings));
+            }
+
+            _settings = settings;
+            RecalculateDerivedSettings(settings);
+        }
+    }
+
     public void Step(SimulationState state)
     {
         Step(state, Array.Empty<BoidInteraction>());
     }
+
     public void Step(
         SimulationState state,
         IReadOnlyList<BoidInteraction> interactions)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(interactions);
+
+        lock (_settingsSyncRoot)
+        {
+            StepCore(state, interactions);
+        }
+    }
+
+    private void StepCore(
+        SimulationState state,
+        IReadOnlyList<BoidInteraction> interactions)
+    {
         var totalStart = Stopwatch.GetTimestamp();
         var populationCount = state.BoidCount;
         if (populationCount == 0)
@@ -307,6 +344,29 @@ public sealed class SimulationStepper
             positionUpdateDuration,
             totalDuration);
     }
+    private void RecalculateDerivedSettings(SimulationSettings settings)
+    {
+        _separationRadiusSquared =
+            settings.SeparationRadius * settings.SeparationRadius;
+
+        _alignmentRadiusSquared =
+            settings.AlignmentRadius * settings.AlignmentRadius;
+
+        _cohesionRadiusSquared =
+            settings.CohesionRadius * settings.CohesionRadius;
+
+        _searchRadius = MathF.Max(
+            settings.SeparationRadius,
+            MathF.Max(
+                settings.AlignmentRadius,
+                settings.CohesionRadius));
+
+        _searchRadiusSquared = _searchRadius * _searchRadius;
+
+        _interactionRadiusSquared =
+            settings.InteractionRadius * settings.InteractionRadius;
+    }
+
     private Vector2 CalculateSteering(
         int boidIndex,
         Boid boid,

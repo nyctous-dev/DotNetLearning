@@ -456,3 +456,96 @@
         display: none;
     }
 }
+
+
+/* Administrator simulation settings */
+.admin-settings-panel {
+    width: 420px;
+    max-height: min(78vh, 760px);
+    overflow-y: auto;
+}
+
+.admin-intro {
+    margin: -4px 0 14px;
+}
+
+.panel-action {
+    display: block;
+    width: 100%;
+    min-height: 38px;
+    padding: 9px 12px;
+    border: 1px solid #2f6f81;
+    border-radius: 8px;
+    background: #112e3b;
+    color: #c9f6ff;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 650;
+    cursor: pointer;
+}
+
+.panel-action:hover:not(:disabled) {
+    border-color: #54b8cf;
+    background: #173b49;
+}
+
+.panel-action:disabled {
+    cursor: wait;
+    opacity: 0.65;
+}
+
+.admin-slider-list {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin: 18px 0;
+}
+
+.admin-slider {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    color: #cbd8e7;
+    font-size: 12px;
+}
+
+.admin-slider > span {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.admin-slider strong {
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+}
+
+.admin-slider input[type="range"] {
+    width: 100%;
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+
+.apply-settings-action {
+    position: sticky;
+    bottom: 0;
+}
+
+.admin-settings-message {
+    margin: 12px 0 0;
+    color: #78e0ad;
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+.admin-settings-message.is-error {
+    color: #ff9b9b;
+}
+
+
+@media (max-width: 640px) {
+    .admin-settings-panel {
+        width: min(420px, calc(100vw - 24px));
+    }
+}

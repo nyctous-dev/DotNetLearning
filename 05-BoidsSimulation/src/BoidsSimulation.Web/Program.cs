@@ -11,6 +11,7 @@ using BoidsSimulation.Web.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.UI;
+using BoidsSimulation.Application.Settings;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -64,6 +65,7 @@ builder.Services.AddSingleton(simulationSettings);
 builder.Services.AddSingleton(initializationSettings);
 builder.Services.AddSingleton(seedProvider);
 builder.Services.AddSingleton(simulationState);
+builder.Services.AddSingleton<SimulationSettingsStore>();
 
 // Register the simulation pipeline.
 builder.Services.AddSingleton<SimulationStepper>();
@@ -118,6 +120,15 @@ builder.Services.AddRazorPages();
 builder.Services.AddScoped<SimulationPreferencesService>();
 builder.Services.AddScoped<SimulationVisualPreferencesState>();
 builder.Services.AddScoped<AdminAccountSeeder>();
+
+builder.Services.AddAuthorization(options =>
+    {
+        options.AddPolicy("RequireAdmin", policy =>
+        {
+            policy.RequireAuthenticatedUser();
+            policy.RequireRole("Admin");
+        });
+    });
 
 var app = builder.Build();
 

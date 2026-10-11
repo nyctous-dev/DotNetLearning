@@ -1,5 +1,6 @@
 let connection = null;
 let dotNetHelper = null;
+let settingsDotNetHelper = null;
 
 let backgroundCanvas = null;
 let backgroundContext = null;
@@ -1060,6 +1061,14 @@ export async function connect(
         publishSnapshot(snapshot);
     });
 
+    newConnection.on("SimulationSettingsUpdated", settings => {
+        if (settingsDotNetHelper) {
+            settingsDotNetHelper
+                .invokeMethodAsync("OnSimulationSettingsUpdated", settings)
+                .catch(() => {});
+        }
+    });
+
     newConnection.onreconnecting(() => {
         if (interactionKeepAliveTimer !== null) {
             clearInterval(interactionKeepAliveTimer);
@@ -1173,6 +1182,40 @@ export async function disconnect() {
     trailScratchCanvas = null;
 
     dotNetHelper = null;
+}
+
+// -----------------------------------------------------------------------------
+// Administrator runtime settings API
+// -----------------------------------------------------------------------------
+
+export function registerSettingsListener(helper) {
+    settingsDotNetHelper = helper;
+}
+
+export function clearSettingsListener() {
+    settingsDotNetHelper = null;
+}
+
+export async function getBehaviorSettings() {
+    if (
+        !connection ||
+        connection.state !== signalR.HubConnectionState.Connected
+    ) {
+        throw new Error("The simulation SignalR connection is not connected.");
+    }
+
+    return await connection.invoke("GetBehaviorSettings");
+}
+
+export async function updateBehaviorSettings(settings) {
+    if (
+        !connection ||
+        connection.state !== signalR.HubConnectionState.Connected
+    ) {
+        throw new Error("The simulation SignalR connection is not connected.");
+    }
+
+    return await connection.invoke("UpdateBehaviorSettings", settings);
 }
 
 // -----------------------------------------------------------------------------

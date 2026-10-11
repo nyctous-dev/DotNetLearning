@@ -1,6 +1,14 @@
+
+using System.Security.Claims;
+using System.Text.Encodings.Web;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace BoidsSimulation.Web.Tests;
 
@@ -21,6 +29,27 @@ public sealed class BoidsSimulationWebApplicationFactory
                     ["ConnectionStrings:IdentityConnection"] =
                         $"Data Source={_databasePath}"
                 });
+        });
+
+        builder.ConfigureTestServices(services =>
+        {
+            services
+                .AddAuthentication(options =>
+                {
+                    options.DefaultScheme =
+                        TestAuthenticationHandler.SchemeName;
+                    options.DefaultAuthenticateScheme =
+                        TestAuthenticationHandler.SchemeName;
+                    options.DefaultChallengeScheme =
+                        TestAuthenticationHandler.SchemeName;
+                    options.DefaultForbidScheme =
+                        TestAuthenticationHandler.SchemeName;
+                })
+                .AddScheme<
+                    AuthenticationSchemeOptions,
+                    TestAuthenticationHandler>(
+                    TestAuthenticationHandler.SchemeName,
+                    _ => { });
         });
     }
 
@@ -46,11 +75,55 @@ public sealed class BoidsSimulationWebApplicationFactory
         }
         catch (IOException)
         {
-            // A temporary test database should not prevent test cleanup.
+            // Temporary database cleanup must not prevent test cleanup.
         }
         catch (UnauthorizedAccessException)
         {
-            // A temporary test database should not prevent test cleanup.
+            // Temporary database cleanup must not prevent test cleanup.
+        }
+    }
+
+    private sealed class TestAuthenticationHandler
+        : AuthenticationHandler<AuthenticationSchemeOptions>
+    {
+        public const string SchemeName = "BoidsTest";
+
+        public TestAuthenticationHandler(
+            IOptionsMonitor<AuthenticationSchemeOptions> options,
+            ILoggerFactory logger,
+            UrlEncoder encoder)
+            : base(options, logger, encoder)
+        {
+        }
+
+        protected override Task<AuthenticateResult> HandleAuthenticateAsync()
+        {
+            if (!Request.Headers.TryGetValue(
+                    "X-Test-Role",
+                    out var roleValues))
+            {
+                return Task.FromResult(AuthenticateResult.NoResult());
+            }
+
+            var role = roleValues.ToString();
+
+            if (string.IsNullOrWhiteSpace(role))
+            {
+                return Task.FromResult(AuthenticateResult.NoResult());
+            }
+
+            var claims = new[]
+            {
+                new Claim(ClaimTypes.NameIdentifier, "integration-test-user"),
+                new Claim(ClaimTypes.Name, "integration-test-user"),
+                new Claim(ClaimTypes.Role, role)
+            };
+
+            var identity = new ClaimsIdentity(claims, SchemeName);
+            var principal = new ClaimsPrincipal(identity);
+            var ticket = new AuthenticationTicket(principal, SchemeName);
+
+            return Task.FromResult(AuthenticateResult.Success(ticket));
         }
     }
 }

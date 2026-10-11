@@ -1,7 +1,6 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
+
 using System.Numerics;
+using BoidsSimulation.Application.Settings;
 using BoidsSimulation.Application.Snapshots;
 using BoidsSimulation.Core.Models;
 using BoidsSimulation.Core.Simulation;
@@ -16,19 +15,31 @@ public sealed class SimulationSession
     private readonly object _syncRoot = new();
     private readonly SimulationState _state;
     private readonly SimulationStepper _stepper;
+    private readonly SimulationSettingsStore? _settingsStore;
 
     private readonly Dictionary<string, ActiveInteraction> _activeInteractions =
         new(StringComparer.Ordinal);
 
+    // Retained for existing tests and callers that do not need runtime settings.
     public SimulationSession(
         SimulationState state,
         SimulationStepper stepper)
+        : this(state, stepper, null)
+    {
+    }
+
+    // Dependency injection uses this constructor in the running application.
+    public SimulationSession(
+        SimulationState state,
+        SimulationStepper stepper,
+        SimulationSettingsStore? settingsStore)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(stepper);
 
         _state = state;
         _stepper = stepper;
+        _settingsStore = settingsStore;
     }
 
     public SimulationSnapshot GetSnapshot()
@@ -38,6 +49,36 @@ public sealed class SimulationSession
             var copiedStates = _state.CopyBoidStates();
 
             return SimulationSnapshot.FromBoidStates(copiedStates);
+        }
+    }
+
+    public SimulationBehaviorSettings GetBehaviorSettings()
+    {
+        lock (_syncRoot)
+        {
+            var settingsStore = GetRequiredSettingsStore();
+
+            return SimulationBehaviorSettings.From(settingsStore.Current);
+        }
+    }
+
+    public SimulationBehaviorSettings UpdateBehaviorSettings(
+        SimulationBehaviorSettings behavior)
+    {
+        ArgumentNullException.ThrowIfNull(behavior);
+
+        lock (_syncRoot)
+        {
+            var settingsStore = GetRequiredSettingsStore();
+
+            // The store validates the requested values against configured limits.
+            var updatedSettings = settingsStore.UpdateBehavior(behavior);
+
+            // Apply the validated settings to the running simulation stepper.
+            // The stepper recalculates its cached radii under its own lock.
+            _stepper.UpdateBehaviorSettings(updatedSettings);
+
+            return SimulationBehaviorSettings.From(updatedSettings);
         }
     }
 
@@ -122,11 +163,19 @@ public sealed class SimulationSession
         {
             RemoveExpiredInteractions();
 
-            // Take a stable interaction snapshot before the stepper's parallel
-            // steering phase. Do not let the stepper read the mutable dictionary.
+            // Use a stable interaction snapshot for each simulation step.
             var interactions = CreateActiveInteractionSnapshot();
+
             _stepper.Step(_state, interactions);
         }
+    }
+
+    private SimulationSettingsStore GetRequiredSettingsStore()
+    {
+        return _settingsStore
+            ?? throw new InvalidOperationException(
+                "Runtime settings are unavailable because no " +
+                "SimulationSettingsStore was provided to this session.");
     }
 
     private BoidInteraction[] CreateActiveInteractionSnapshot()

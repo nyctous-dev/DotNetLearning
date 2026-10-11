@@ -1,5 +1,7 @@
 ﻿@using Microsoft.AspNetCore.Components.Authorization
+@using BoidsSimulation.Application.Settings
 @using Microsoft.JSInterop
+@using BoidsSimulation.Core.Models
 @inherits LayoutComponentBase
 @implements IAsyncDisposable
 
@@ -9,6 +11,7 @@
 @inject BoidsSimulation.Web.Services.SimulationPreferencesService PreferencesService
 @inject BoidsSimulation.Web.Services.SimulationConnectionStatus ConnectionStatus
 @inject BoidsSimulation.Web.Services.SimulationVisualPreferencesState VisualPreferences
+@inject SimulationLimits SimulationLimits
 
 <div class="app-shell">
     <header class="app-header">
@@ -142,6 +145,113 @@
                 </Authorized>
             </AuthorizeView>
 
+            <AuthorizeView Roles="Admin">
+                <Authorized>
+                    <details class="header-menu" name="header-menu">
+                        <summary>
+                            <span class="menu-icon" aria-hidden="true">⚙</span>
+                            Admin
+                            <span class="chevron" aria-hidden="true"></span>
+                        </summary>
+
+                        <div class="dropdown-panel admin-settings-panel">
+                            <div class="panel-heading">
+                                <span class="panel-eyebrow">GLOBAL CONTROLS</span>
+                                <h2>Simulation behavior</h2>
+                            </div>
+
+                            <p class="panel-note admin-intro">
+                                These settings affect the shared simulation for every connected user.
+                                Adjust the sliders, then apply the changes.
+                            </p>
+
+                            <button
+                                type="button"
+                                class="panel-action"
+                                disabled="@_settingsLoading"
+                                @onclick="LoadBehaviorSettingsAsync">
+                                @(_settingsLoading ? "Loading settings…" : "Load current settings")
+                            </button>
+
+                            @if (!string.IsNullOrWhiteSpace(_settingsMessage))
+                            {
+                                <p class="admin-settings-message @(_settingsMessageIsError ? "is-error" : "")" role="status">
+                                    @_settingsMessage
+                                </p>
+                            }
+
+                            @if (_hasLoadedSettings)
+                            {
+                                <div class="admin-slider-list">
+                                    <label class="admin-slider" for="admin-separation-radius">
+                                        <span><span>Separation radius</span><strong>@_settingsEditor.SeparationRadius.ToString("0.##")</strong></span>
+                                        <input id="admin-separation-radius" type="range" min="@SimulationLimits.SeparationRadius.Min" max="@SimulationLimits.SeparationRadius.Max" step="0.1" @bind="_settingsEditor.SeparationRadius" @bind:event="oninput" />
+                                    </label>
+
+                                    <label class="admin-slider" for="admin-alignment-radius">
+                                        <span><span>Alignment radius</span><strong>@_settingsEditor.AlignmentRadius.ToString("0.##")</strong></span>
+                                        <input id="admin-alignment-radius" type="range" min="@SimulationLimits.AlignmentRadius.Min" max="@SimulationLimits.AlignmentRadius.Max" step="0.1" @bind="_settingsEditor.AlignmentRadius" @bind:event="oninput" />
+                                    </label>
+
+                                    <label class="admin-slider" for="admin-cohesion-radius">
+                                        <span><span>Cohesion radius</span><strong>@_settingsEditor.CohesionRadius.ToString("0.##")</strong></span>
+                                        <input id="admin-cohesion-radius" type="range" min="@SimulationLimits.CohesionRadius.Min" max="@SimulationLimits.CohesionRadius.Max" step="0.1" @bind="_settingsEditor.CohesionRadius" @bind:event="oninput" />
+                                    </label>
+
+                                    <label class="admin-slider" for="admin-separation-weight">
+                                        <span><span>Separation weight</span><strong>@_settingsEditor.SeparationWeight.ToString("0.##")</strong></span>
+                                        <input id="admin-separation-weight" type="range" min="@SimulationLimits.SeparationWeight.Min" max="@SimulationLimits.SeparationWeight.Max" step="0.1" @bind="_settingsEditor.SeparationWeight" @bind:event="oninput" />
+                                    </label>
+
+                                    <label class="admin-slider" for="admin-alignment-weight">
+                                        <span><span>Alignment weight</span><strong>@_settingsEditor.AlignmentWeight.ToString("0.##")</strong></span>
+                                        <input id="admin-alignment-weight" type="range" min="@SimulationLimits.AlignmentWeight.Min" max="@SimulationLimits.AlignmentWeight.Max" step="0.1" @bind="_settingsEditor.AlignmentWeight" @bind:event="oninput" />
+                                    </label>
+
+                                    <label class="admin-slider" for="admin-cohesion-weight">
+                                        <span><span>Cohesion weight</span><strong>@_settingsEditor.CohesionWeight.ToString("0.##")</strong></span>
+                                        <input id="admin-cohesion-weight" type="range" min="@SimulationLimits.CohesionWeight.Min" max="@SimulationLimits.CohesionWeight.Max" step="0.1" @bind="_settingsEditor.CohesionWeight" @bind:event="oninput" />
+                                    </label>
+
+                                    <label class="admin-slider" for="admin-max-speed">
+                                        <span><span>Maximum speed</span><strong>@_settingsEditor.MaxSpeed.ToString("0.##")</strong></span>
+                                        <input id="admin-max-speed" type="range" min="@SimulationLimits.MaxSpeed.Min" max="@SimulationLimits.MaxSpeed.Max" step="1" @bind="_settingsEditor.MaxSpeed" @bind:event="oninput" />
+                                    </label>
+
+                                    <label class="admin-slider" for="admin-max-steering-force">
+                                        <span><span>Maximum steering force</span><strong>@_settingsEditor.MaxSteeringForce.ToString("0.##")</strong></span>
+                                        <input id="admin-max-steering-force" type="range" min="@SimulationLimits.MaxSteeringForce.Min" max="@SimulationLimits.MaxSteeringForce.Max" step="1" @bind="_settingsEditor.MaxSteeringForce" @bind:event="oninput" />
+                                    </label>
+
+                                    <label class="admin-slider" for="admin-attraction-force">
+                                        <span><span>Attraction force</span><strong>@_settingsEditor.AttractionForce.ToString("0.##")</strong></span>
+                                        <input id="admin-attraction-force" type="range" min="@SimulationLimits.AttractionForce.Min" max="@SimulationLimits.AttractionForce.Max" step="1" @bind="_settingsEditor.AttractionForce" @bind:event="oninput" />
+                                    </label>
+
+                                    <label class="admin-slider" for="admin-repulsion-force">
+                                        <span><span>Repulsion force</span><strong>@_settingsEditor.RepulsionForce.ToString("0.##")</strong></span>
+                                        <input id="admin-repulsion-force" type="range" min="@SimulationLimits.RepulsionForce.Min" max="@SimulationLimits.RepulsionForce.Max" step="1" @bind="_settingsEditor.RepulsionForce" @bind:event="oninput" />
+                                    </label>
+
+                                    <label class="admin-slider" for="admin-interaction-radius">
+                                        <span><span>Interaction radius</span><strong>@_settingsEditor.InteractionRadius.ToString("0.##")</strong></span>
+                                        <input id="admin-interaction-radius" type="range" min="@SimulationLimits.InteractionRadius.Min" max="@SimulationLimits.InteractionRadius.Max" step="1" @bind="_settingsEditor.InteractionRadius" @bind:event="oninput" />
+                                    </label>
+                                </div>
+
+                                <button
+                                    type="button"
+                                    class="panel-action apply-settings-action"
+                                    disabled="@(_settingsLoading || _settingsSaving)"
+                                    @onclick="ApplyBehaviorSettingsAsync">
+                                    @(_settingsSaving ? "Applying changes…" : "Apply settings to all users")
+                                </button>
+                            }
+                        </div>
+                    </details>
+                </Authorized>
+            </AuthorizeView>
+
             <span class="header-divider" aria-hidden="true"></span>
 
             <AuthorizeView>
@@ -181,6 +291,14 @@
     private IJSObjectReference? _simulationModule;
 
     private string _interactionMode = "Repel";
+
+    private readonly SettingsEditorModel _settingsEditor = new();
+    private DotNetObjectReference<MainLayout>? _settingsDotNetReference;
+    private bool _hasLoadedSettings;
+    private bool _settingsLoading;
+    private bool _settingsSaving;
+    private bool _settingsMessageIsError;
+    private string? _settingsMessage;
 
     // A scoped EF Core DbContext must not service concurrent operations.
     // Serialize preference saves and save the most recent state each time.
@@ -246,6 +364,18 @@
             await _simulationModule.InvokeVoidAsync(
                 "setInteractionMode",
                 _interactionMode);
+
+            var authenticationState =
+                await AuthenticationStateProvider.GetAuthenticationStateAsync();
+
+            if (authenticationState.User.IsInRole("Admin"))
+            {
+                _settingsDotNetReference = DotNetObjectReference.Create(this);
+
+                await _simulationModule.InvokeVoidAsync(
+                    "registerSettingsListener",
+                    _settingsDotNetReference);
+            }
         }
         catch (JSDisconnectedException)
         {
@@ -378,6 +508,142 @@
         }
     }
 
+    private async Task LoadBehaviorSettingsAsync()
+    {
+        _settingsLoading = true;
+        _settingsMessage = null;
+        _settingsMessageIsError = false;
+
+        try
+        {
+            _simulationModule ??= await JS.InvokeAsync<IJSObjectReference>(
+                "import",
+                "./js/simulationClient.js");
+
+            var settings = await _simulationModule.InvokeAsync<SimulationBehaviorSettings>(
+                "getBehaviorSettings");
+
+            _settingsEditor.CopyFrom(settings);
+            _hasLoadedSettings = true;
+            _settingsMessage = "Current shared settings loaded.";
+        }
+        catch (JSDisconnectedException)
+        {
+            _settingsMessage = "The browser connection was interrupted. Try loading settings again.";
+            _settingsMessageIsError = true;
+        }
+        catch (JSException exception)
+        {
+            Logger.LogWarning(exception, "Could not load runtime simulation settings.");
+            _settingsMessage = "The simulation connection is not ready. Try loading again in a moment.";
+            _settingsMessageIsError = true;
+        }
+        finally
+        {
+            _settingsLoading = false;
+        }
+    }
+
+    private async Task ApplyBehaviorSettingsAsync()
+    {
+        _settingsSaving = true;
+        _settingsMessage = null;
+        _settingsMessageIsError = false;
+
+        try
+        {
+            _simulationModule ??= await JS.InvokeAsync<IJSObjectReference>(
+                "import",
+                "./js/simulationClient.js");
+
+            var updatedSettings = await _simulationModule.InvokeAsync<SimulationBehaviorSettings>(
+                "updateBehaviorSettings",
+                _settingsEditor.ToBehaviorSettings());
+
+            _settingsEditor.CopyFrom(updatedSettings);
+            _settingsMessage = "Settings applied to the shared simulation.";
+        }
+        catch (JSDisconnectedException)
+        {
+            _settingsMessage = "The browser connection was interrupted. Try applying the settings again.";
+            _settingsMessageIsError = true;
+        }
+        catch (JSException exception)
+        {
+            Logger.LogWarning(exception, "Could not apply runtime simulation settings.");
+            _settingsMessage = "The server rejected the settings or the simulation connection is not ready.";
+            _settingsMessageIsError = true;
+        }
+        finally
+        {
+            _settingsSaving = false;
+        }
+    }
+
+    [JSInvokable]
+    public Task OnSimulationSettingsUpdated(SimulationBehaviorSettings settings)
+    {
+        return InvokeAsync(() =>
+        {
+            _settingsEditor.CopyFrom(settings);
+            _hasLoadedSettings = true;
+
+            if (!_settingsSaving)
+            {
+                _settingsMessage = "Shared settings were updated by an administrator.";
+                _settingsMessageIsError = false;
+            }
+
+            StateHasChanged();
+        });
+    }
+
+    private sealed class SettingsEditorModel
+    {
+        public float SeparationRadius { get; set; }
+        public float AlignmentRadius { get; set; }
+        public float CohesionRadius { get; set; }
+        public float SeparationWeight { get; set; }
+        public float AlignmentWeight { get; set; }
+        public float CohesionWeight { get; set; }
+        public float MaxSpeed { get; set; }
+        public float MaxSteeringForce { get; set; }
+        public float AttractionForce { get; set; }
+        public float RepulsionForce { get; set; }
+        public float InteractionRadius { get; set; }
+
+        public void CopyFrom(SimulationBehaviorSettings settings)
+        {
+            SeparationRadius = settings.SeparationRadius;
+            AlignmentRadius = settings.AlignmentRadius;
+            CohesionRadius = settings.CohesionRadius;
+            SeparationWeight = settings.SeparationWeight;
+            AlignmentWeight = settings.AlignmentWeight;
+            CohesionWeight = settings.CohesionWeight;
+            MaxSpeed = settings.MaxSpeed;
+            MaxSteeringForce = settings.MaxSteeringForce;
+            AttractionForce = settings.AttractionForce;
+            RepulsionForce = settings.RepulsionForce;
+            InteractionRadius = settings.InteractionRadius;
+        }
+
+        public SimulationBehaviorSettings ToBehaviorSettings()
+        {
+            return new SimulationBehaviorSettings(
+                SeparationRadius,
+                AlignmentRadius,
+                CohesionRadius,
+                SeparationWeight,
+                AlignmentWeight,
+                CohesionWeight,
+                MaxSpeed,
+                MaxSteeringForce,
+                AttractionForce,
+                RepulsionForce,
+                InteractionRadius);
+        }
+    }
+
     public async ValueTask DisposeAsync()
     {
         ConnectionStatus.Changed -= HandleConnectionStatusChanged;
@@ -387,6 +653,15 @@
         {
             try
             {
+                await _simulationModule.InvokeVoidAsync("clearSettingsListener");
+            }
+            catch (JSDisconnectedException)
+            {
+                // The browser circuit is already disconnected.
+            }
+
+            try
+            {
                 await _simulationModule.DisposeAsync();
             }
             catch (JSDisconnectedException)
@@ -394,5 +669,7 @@
                 // The browser circuit is already disconnected.
             }
         }
+
+        _settingsDotNetReference?.Dispose();
     }
 }

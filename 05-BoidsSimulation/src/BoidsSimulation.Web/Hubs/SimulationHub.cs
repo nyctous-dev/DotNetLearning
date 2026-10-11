@@ -1,7 +1,6 @@
-using System.Threading.Tasks;
-using System;
 using System.Numerics;
 using BoidsSimulation.Application.Sessions;
+using BoidsSimulation.Application.Settings;
 using BoidsSimulation.Application.Snapshots;
 using BoidsSimulation.Core.Models;
 using Microsoft.AspNetCore.Authorization;
@@ -10,8 +9,8 @@ using Microsoft.AspNetCore.SignalR;
 namespace BoidsSimulation.Web.Hubs;
 
 /// <summary>
-/// Provides snapshots of the shared simulation and receives authenticated
-/// mouse interactions from connected clients.
+/// Provides snapshots of the shared simulation, receives mouse interactions,
+/// and exposes administrator-only runtime settings operations.
 /// </summary>
 public sealed class SimulationHub : Hub
 {
@@ -75,6 +74,43 @@ public sealed class SimulationHub : Hub
     public void EndInteraction()
     {
         _session.EndInteraction(Context.ConnectionId);
+    }
+
+    /// <summary>
+    /// Returns the behavior settings used by the live simulation.
+    /// Only members of the Admin role may call this method.
+    /// </summary>
+    [Authorize(Policy = "RequireAdmin")]
+    public SimulationBehaviorSettings GetBehaviorSettings()
+    {
+        return _session.GetBehaviorSettings();
+    }
+
+    /// <summary>
+    /// Validates and applies behavior settings, then notifies every connected
+    /// client. Only members of the Admin role may call this method.
+    /// </summary>
+    [Authorize(Policy = "RequireAdmin")]
+    public async Task<SimulationBehaviorSettings> UpdateBehaviorSettings(
+        SimulationBehaviorSettings behaviorSettings)
+    {
+        SimulationBehaviorSettings updatedSettings;
+
+        try
+        {
+            updatedSettings = _session.UpdateBehaviorSettings(behaviorSettings);
+        }
+        catch (ArgumentException exception)
+        {
+            throw new HubException(
+                $"Invalid simulation settings: {exception.Message}");
+        }
+
+        await Clients.All.SendAsync(
+            "SimulationSettingsUpdated",
+            updatedSettings);
+
+        return updatedSettings;
     }
 
     public override async Task OnDisconnectedAsync(Exception? exception)
